@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 const Navbar = () => {
   return (
-    <nav className="bg-[rgba(26,51,36,0.5)] h-[85px] fixed w-full z-20 top-0 start-0 border-b border-light-yellow flex items-center ">
+    <nav className="bg-[rgba(26,51,36,0.5)] h-[85px] fixed w-full top-0 start-0 border-b border-[var(--light-yellow)] flex items-center ">
       <div className="max-w-screen-xl flex flex-wrap items-center justify-between mx-auto p-4 w-full">
         {/* Logo */}
         <div className="flex-shrink-0">
