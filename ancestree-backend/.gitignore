@@ -1,0 +1,43 @@
+# Node.js and npm
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+
+# Firebase Service Account Key (Backend)
+src/config/capstone-ancestree-firebase-adminsdk-fbsvc-650a69d943.json
+
+# Next.js Build Output (Frontend)
+.next/
+out/
+build/
+
+# Cache and Temp Files (Frontend/General)
+.cache/
+.turbo/
+
+# Logs
+*.log
+
+# IDE specific files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# macOS specific files
+.DS_Store
+
+# Optional: Ignore bundled dependencies
+# bundled/
+
+# Optional: Ignore coverage reports
+# coverage/
