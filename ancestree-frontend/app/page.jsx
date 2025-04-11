@@ -1,5 +1,5 @@
-import Image from 'next/image';
 import Navbar from '../components/Navbar';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -14,9 +14,9 @@ export default function Home() {
           <h2 className="text-7xl md:text-9xl font-bold text-light-yellow mb-30">
             AncesTREE
           </h2>
-          <button className="bg-[var(--light-yellow)] text-[var(--dark-green)] font-bold py-3 px-8 rounded-full text-xl">
-            Get Started
-          </button>
+          <Link href="/auth/signup" className="bg-[var(--light-yellow)] text-[var(--dark-green)] font-bold py-3 px-8 rounded-full text-xl">
+            GET STARTED
+          </Link>
         </div>
       </div>
     </>
