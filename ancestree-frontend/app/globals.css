@@ -1,26 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 @import "tailwindcss";
 
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --dark-green: #1A3324;
+  --light-green: #4F6F52;
+  --light-yellow: #F5F5DC;
+  --white: #EDEDED;
+  --black: #0A0A0A;
+  --gray: #D9D9D9;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Settings Fonts */
+* {
+  font-family: Poppins, Arial, Helvetica, sans-serif;
+  /* color: var(--light-yellow); */
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-image: url(/images/leavesBG.jpg);
+  background-position: center;
+  background-size: cover;
+  min-height: 100vh;
 }
