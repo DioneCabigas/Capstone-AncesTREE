@@ -5,25 +5,39 @@
  * 
  * This component displays the navigation bar at the top of the application.
  * It shows different options based on whether the user is authenticated or not.
- * Includes a logout function to sign users out of the application.
+ * The user's first name is displayed in the profile section.
  */
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { auth } from "@/app/utils/firebase";
+import { auth, db } from "@/app/utils/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState({ firstName: "" });
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const router = useRouter();
 
-  // Handle auth state changes
+  // Handle auth state changes and fetch user data
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      
+      // If user is authenticated, fetch their data from Firestore
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists()) {
+            setUserData(userDoc.data());
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
+      }
     });
 
     return () => unsubscribe();
@@ -55,6 +69,31 @@ export default function Navbar() {
     } catch (error) {
       console.error("Error signing out: ", error);
     }
+  };
+
+  // Get the first initial for the avatar
+  const getInitial = () => {
+    if (userData.firstName) {
+      return userData.firstName.charAt(0).toUpperCase();
+    }
+    if (user && user.displayName) {
+      return user.displayName.charAt(0).toUpperCase();
+    }
+    if (user && user.email) {
+      return user.email.charAt(0).toUpperCase();
+    }
+    return "U";
+  };
+
+  // Get the display name for the profile
+  const getDisplayName = () => {
+    if (userData.firstName) {
+      return userData.firstName;
+    }
+    if (user && user.displayName) {
+      return user.displayName.split(' ')[0]; // Just get the first name
+    }
+    return "User";
   };
 
   return (
@@ -101,12 +140,12 @@ export default function Navbar() {
               onClick={() => setMenuOpen(!menuOpen)}
               className="flex items-center space-x-2"
             >
-              {/* User avatar - replace with actual avatar if available */}
+              {/* User avatar - with user's first initial */}
               <div className="h-8 w-8 rounded-full bg-[var(--light-yellow)] text-[var(--dark-green)] flex items-center justify-center">
-                {user.displayName ? user.displayName.charAt(0) : "U"}
+                {getInitial()}
               </div>
               <span className="hidden md:inline-block">
-                {user.displayName || "User"}
+                {getDisplayName()}
               </span>
             </button>
 
