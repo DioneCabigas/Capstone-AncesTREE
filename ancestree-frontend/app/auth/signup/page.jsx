@@ -1,17 +1,27 @@
 'use client'
 
+/**
+ * Signup Page Component
+ * 
+ * This page allows users to create a new account.
+ * It uses the AuthController with mode="REDIRECT" to prevent
+ * authenticated users from accessing it.
+ */
+
 import Navbar from '../../../components/Navbar';
 import { useRouter } from "next/navigation";
-import { useState, FormEvent } from "react";
-import {
-  useCreateUserWithEmailAndPassword,
-  useSendEmailVerification,
-} from "react-firebase-hooks/auth";
-import { auth, db } from '@/app/utils/firebase';
-import { confirmPasswordReset, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { useState } from "react";
+import { auth } from '@/app/utils/firebase';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import AuthController from '@/components/AuthController'; // Import the unified controller
+import Link from "next/link";
 
-
-export default function Signup() {
+/**
+ * SignupContent Component
+ * 
+ * Contains the actual content of the signup page.
+ */
+function SignupContent() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -61,7 +71,7 @@ export default function Signup() {
       if(error instanceof Error){
         setError(error.message);
       } else {
-        setError("An unknown error occured, please try again.");
+        setError("An unknown error occurred, please try again.");
       }
     }
   };
@@ -140,7 +150,10 @@ export default function Signup() {
               required
             />
           </div>
-          {error && <p className="text-red-500 text-sm" >{error}</p>}
+          <p className='mt-1'>
+            Already have an account? {" "} <Link href="/auth/login" className="font-semibold hover:underline">Login</Link>
+          </p>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           {message && <p className="text-green-500 text-sm">{message}</p>}
           <div className="flex justify-end mt-5">
             <button
@@ -155,4 +168,18 @@ export default function Signup() {
       </div>
     </div>
   );
-};
+}
+
+/**
+ * Signup Component (Main export)
+ * 
+ * This wraps the SignupContent component with the AuthController component
+ * in REDIRECT mode to prevent authenticated users from accessing the signup page.
+ */
+export default function Signup() {
+  return (
+    <AuthController mode="REDIRECT">
+      <SignupContent />
+    </AuthController>
+  );
+}

@@ -3,32 +3,27 @@
 /**
  * Home Page Component
  * 
- * This file contains two components:
- * 1. HomeContent - The actual content of the home page
- * 2. Home - A wrapper that applies the ProtectedRoute component
- * 
- * The page is protected and only accessible to authenticated users with verified emails.
- * It also handles saving user data to Firestore if needed.
+ * This page is protected and only accessible to authenticated users with verified emails.
+ * It uses the AuthController component with mode="PROTECT" to enforce this.
  */
 
 import Navbar from '../../../components/Navbar';
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/app/utils/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import ProtectedRoute from '@/components/ProtectedRoute'; // Adjust the path based on your project structure
+import AuthController from '@/components/AuthController'; // Import the unified controller
+import Link from 'next/link';
 
 /**
  * HomeContent Component
- * It also handles:
- * - Setting up the user's document in Firestore if it doesn't exist
- * - Using registration data from localStorage if available
- * - Showing verification messages if needed
+ * 
+ * Contains the actual content of the home page that will be displayed
+ * after a user has been authenticated and their email verified.
  */
 function HomeContent() {
-  const [user, setUser] = useState(null); // Store the authenticated user
-  const [verificationMessage, setVerificationMessage] = useState(""); // Messages about email verification
+  const [user, setUser] = useState(null);
+  const [verificationMessage, setVerificationMessage] = useState("");
 
   useEffect(() => {
     // Subscribe to auth state changes
@@ -66,7 +61,6 @@ function HomeContent() {
           setVerificationMessage("Your email address is not yet verified. Please check your inbox (and spam folder) for the verification link.");
         }
       }
-      // If authUser is null, the ProtectedRoute component will handle redirection
     });
 
     // Cleanup subscription when component unmounts
@@ -97,16 +91,13 @@ function HomeContent() {
 /**
  * Home Component (Main export)
  * 
- * This wraps the HomeContent component with the ProtectedRoute component
- * to ensure only authenticated users can access this page.
- * 
- * If a user is not authenticated, the ProtectedRoute component will
- * redirect them to the login page automatically.
+ * This wraps the HomeContent component with the AuthController component
+ * in PROTECT mode to ensure only authenticated users can access this page.
  */
 export default function Home() {
   return (
-    <ProtectedRoute>
+    <AuthController mode="PROTECT">
       <HomeContent />
-    </ProtectedRoute>
+    </AuthController>
   );
 }

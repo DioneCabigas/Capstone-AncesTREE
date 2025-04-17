@@ -1,16 +1,28 @@
 'use client'
 
-import Navbar from '../../../components/Navbar';
+/**
+ * Login Page Component
+ * 
+ * This page allows users to log in to the application.
+ * It uses the AuthController with mode="REDIRECT" to prevent 
+ * authenticated users from accessing it.
+ */
 
+import Navbar from '../../../components/Navbar';
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/app/utils/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-
+import AuthController from '@/components/AuthController'; // Import the unified controller
 import Link from "next/link";
 
-export default function Login() {
+/**
+ * LoginContent Component
+ * 
+ * Contains the actual content of the login page.
+ */
+function LoginContent() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -42,13 +54,13 @@ export default function Login() {
         }
         router.push("/auth/home");
       } else {
-        setError("Please verify your email before loggin in.")
+        setError("Please verify your email before logging in.")
       }
     } catch (error) {
       if (error instanceof Error) {
         setError(error.message);
       } else {
-        setError ("An unknown error occurred, please try again.");
+        setError("An unknown error occurred, please try again.");
       }
     }
   };
@@ -89,14 +101,17 @@ export default function Login() {
             />
           </div>
           <p className='mt-3'>
-            Forgot password? {" "} <Link href="/" className="font-semibold hover:underline" >Click Here</Link>
+            Forgot password? {" "} <Link href="/" className="font-semibold hover:underline">Click Here</Link>
           </p>
-          {error && <p className="text-red-500 text-sm" >{error}</p>}
+          <p className='mt-1'>
+            Don't have an account? {" "} <Link href="/auth/signup" className="font-semibold hover:underline">Sign Up</Link>
+          </p>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           <div className="flex justify-end mt-5">
             <button
               type="submit"
               onClick={onLogin}
-              className=" font-bold py-2 px-4 border border-[var(--light-yellow)] hover:underline decoration-2 underline-offset-5"
+              className="font-bold py-2 px-4 border border-[var(--light-yellow)] hover:underline decoration-2 underline-offset-5"
             >
               LOGIN
             </button>
@@ -104,5 +119,19 @@ export default function Login() {
         </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * Login Component (Main export)
+ * 
+ * This wraps the LoginContent component with the AuthController component
+ * in REDIRECT mode to prevent authenticated users from accessing the login page.
+ */
+export default function Login() {
+  return (
+    <AuthController mode="REDIRECT">
+      <LoginContent />
+    </AuthController>
   );
 }
