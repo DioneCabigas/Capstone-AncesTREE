@@ -1,11 +1,11 @@
 'use client'
 
 /**
- * Signup Page Component
+ * Signup Page Component - Redesigned with 60-30-10 Color Rule
  * 
- * This page allows users to create a new account.
- * It uses the AuthController with mode="REDIRECT" to prevent
- * authenticated users from accessing it.
+ * 60% - Light Yellow (Background, main content areas)
+ * 30% - Light Green (Secondary elements, header, footer)
+ * 10% - Dark Green (Accents, important buttons, headings)
  */
 
 import Navbar from '../../../components/Navbar';
@@ -13,14 +13,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { auth } from '@/app/utils/firebase';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import AuthController from '@/components/AuthController'; // Import the unified controller
+import AuthController from '@/components/AuthController';
 import Link from "next/link";
 
-/**
- * SignupContent Component
- * 
- * Contains the actual content of the signup page.
- */
 function SignupContent() {
   const router = useRouter();
 
@@ -77,105 +72,118 @@ function SignupContent() {
   };
 
   return (
-    <div className="relative h-screen w-screen flex items-center justify-center">
-      {/* Navbar */}
+    <div className="relative min-h-screen bg-[var(--light-yellow)] flex flex-col">
+      {/* Navbar - 30% Secondary Color */}
       <Navbar />
 
-      {/* Signup Form */}
-      <div className="relative z-10 bg-[rgba(26,51,36,0.8)] text-[var(--light-yellow)] border p-8 shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-10">GET STARTED</h2>
-        <form className="space-y-4 flex flex-col" onSubmit={onSignup}>
-          <div>
-            <label htmlFor="email" className="block text-l font-semibold mb-2">
-              Email Address:
-            </label>
-            <input
-              type="email"
-              id="email"
-              className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-3 leading-tight"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="firstName" className="block text-l font-semibold mb-2">
-              First Name:
-            </label>
-            <input
-              type="text"
-              id="firstName"
-              className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-3 leading-tight"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="lastName" className="block text-l font-semibold mb-2">
-              Last Name:
-            </label>
-            <input
-              type="text"
-              id="lastName"
-              className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-3 leading-tight"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-l font-semibold mb-2">
-              Password:
-            </label>
-            <input
-              type="password"
-              id="password"
-              className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-3 leading-tight"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="confirmPassword" className="block text-l font-semibold mb-2">
-              Confirm Password:
-            </label>
-            <input
-              type="password"
-              id="confirmPassword"
-              className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-3 leading-tight"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-            />
-          </div>
-          <p className='mt-1'>
-            Already have an account? {" "} <Link href="/auth/login" className="font-semibold hover:underline">Login</Link>
-          </p>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          {message && <p className="text-green-500 text-sm">{message}</p>}
-          <div className="flex justify-end mt-5">
-            <button
-              type="submit"
-              onClick={onSignup}
-              className="font-bold py-2 px-4 border border-[var(--light-yellow)] hover:underline decoration-2 underline-offset-5"
-            >
-              SUBMIT
-            </button>
-          </div>
-        </form>
+      {/* Main Content - 60% Dominant Color (light yellow background) */}
+      <div className="flex-grow flex items-center justify-center px-4 py-10">
+        {/* Signup Form Card */}
+        <div className="bg-white shadow-lg rounded-lg border border-[var(--light-green)] w-full max-w-md p-8">
+          <h2 className="text-2xl font-bold mb-8 text-[var(--dark-green)]">GET STARTED</h2>
+          
+          <form className="space-y-4" onSubmit={onSignup}>
+            <div>
+              <label htmlFor="email" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+                Email Address:
+              </label>
+              <input
+                type="email"
+                id="email"
+                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="firstName" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+                First Name:
+              </label>
+              <input
+                type="text"
+                id="firstName"
+                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="lastName" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+                Last Name:
+              </label>
+              <input
+                type="text"
+                id="lastName"
+                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="password" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+                Password:
+              </label>
+              <input
+                type="password"
+                id="password"
+                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="confirmPassword" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+                Confirm Password:
+              </label>
+              <input
+                type="password"
+                id="confirmPassword"
+                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-2 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            <p className="text-[var(--light-green)]">
+              Already have an account? {" "} 
+              <Link href="/auth/login" className="text-[var(--dark-green)] font-semibold hover:underline">
+                Login
+              </Link>
+            </p>
+            
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {message && <p className="text-green-500 text-sm">{message}</p>}
+            
+            <div className="flex justify-end mt-6">
+              {/* 10% Accent Color */}
+              <button
+                type="submit"
+                className="bg-[var(--dark-green)] text-[var(--light-yellow)] font-bold py-3 px-6 rounded-md hover:bg-opacity-90 transition-all"
+              >
+                SUBMIT
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
+      
+      {/* Footer - 30% Secondary Color */}
+      <footer className="bg-[var(--light-green)] py-4 text-center text-[var(--light-yellow)]">
+        <p>© 2025 Your Application Name</p>
+      </footer>
     </div>
   );
 }
 
-/**
- * Signup Component (Main export)
- * 
- * This wraps the SignupContent component with the AuthController component
- * in REDIRECT mode to prevent authenticated users from accessing the signup page.
- */
 export default function Signup() {
   return (
     <AuthController mode="REDIRECT">
