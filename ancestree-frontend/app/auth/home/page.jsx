@@ -80,14 +80,6 @@ function HomeContent() {
           <h1 className="text-5xl font-bold text-[#313131] mb-4">Welcome to AncesTREE!</h1>
           <p className="text-xl text-[#313131] mb-6">Your digital family heritage platform</p>
           
-          {/* Call to action button using accent color */}
-          {!user && (
-            <Link href="/auth/signup">
-              <button className="bg-[#313131] text-white px-6 py-3 rounded-md hover:bg-opacity-90 transition-colors">
-                Get Started
-              </button>
-            </Link>
-          )}
         </div>
         
         {/* Show verification message if user's email is not verified */}
@@ -113,33 +105,31 @@ function HomeContent() {
           </div>
         </div>
         
-        {/* Authenticated content section */}
-        {user && user.emailVerified && (
-          <div className="bg-white border-2 border-[#4F6F52] rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-[#313131] mb-4">Your Family Dashboard</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
-                <h3 className="text-xl font-semibold text-[#313131] mb-2">Recent Updates</h3>
-                <p className="text-[#313131]">No recent updates to display.</p>
-              </div>
-              <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
-                <h3 className="text-xl font-semibold text-[#313131] mb-2">Quick Actions</h3>
-                <div className="flex flex-col space-y-2">
-                  <Link href="/auth/family-tree">
-                    <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
-                      View Family Tree
-                    </button>
-                  </Link>
-                  <Link href="/auth/gallery">
-                    <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
-                      Manage Gallery
-                    </button>
-                  </Link>
-                </div>
+        {/* Dashboard section - removed authentication check */}
+        <div className="bg-white border-2 border-[#4F6F52] rounded-lg p-6">
+          <h2 className="text-2xl font-bold text-[#313131] mb-4">Your Family Dashboard</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
+              <h3 className="text-xl font-semibold text-[#313131] mb-2">Recent Updates</h3>
+              <p className="text-[#313131]">No recent updates to display.</p>
+            </div>
+            <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
+              <h3 className="text-xl font-semibold text-[#313131] mb-2">Quick Actions</h3>
+              <div className="flex flex-col space-y-2">
+                <Link href="/auth/family-tree">
+                  <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
+                    View Family Tree
+                  </button>
+                </Link>
+                <Link href="/auth/gallery">
+                  <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
+                    Manage Gallery
+                  </button>
+                </Link>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
       
       {/* Footer with accent color */}
