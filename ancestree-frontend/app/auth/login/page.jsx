@@ -3,9 +3,9 @@
 /**
  * Login Page Component - Redesigned with 60-30-10 Color Rule
  * 
- * 60% - Light Yellow (Background, main content areas)
- * 30% - Light Green (Secondary elements, header, footer)
- * 10% - Dark Green (Accents, important buttons, headings)
+ * 60% - White (#FFFFFF) - Primary/dominant color
+ * 30% - Light Green (#4F6F52) - Secondary color
+ * 10% - Dark Gray (#313131) - Accent color
  */
 
 import Navbar from '../../../components/Navbar';
@@ -61,25 +61,25 @@ function LoginContent() {
   };
 
   return (
-    <div className="relative min-h-screen bg-[var(--light-yellow)] flex flex-col">
+    <div className="relative min-h-screen bg-white flex flex-col">
       {/* Navbar - 30% Secondary Color */}
       <Navbar />
 
-      {/* Main Content - 60% Dominant Color (light yellow background) */}
-      <div className="flex-grow flex items-center justify-center px-4 py-10">
+      {/* Main Content - 60% Dominant Color (white background) */}
+      <div className="flex-grow flex items-center justify-center px-4 py-10 content-container">
         {/* Login Form Card */}
-        <div className="bg-white shadow-lg rounded-lg border border-[var(--light-green)] w-full max-w-md p-8">
-          <h2 className="text-2xl font-bold mb-8 text-[var(--dark-green)]">WELCOME BACK!</h2>
+        <div className="bg-white shadow-lg rounded-lg border border-[#4F6F52] w-full max-w-md p-8">
+          <h2 className="text-2xl font-bold mb-8 text-[#313131]">WELCOME BACK!</h2>
           
           <form className="space-y-5" onSubmit={onLogin}>
             <div>
-              <label htmlFor="email" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+              <label htmlFor="email" className="block text-lg font-medium mb-2 text-[#4F6F52]">
                 Email Address:
               </label>
               <input
                 type="email"
                 id="email"
-                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-3 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                className="bg-white text-[#313131] w-full py-3 px-4 border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#313131]"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -87,29 +87,29 @@ function LoginContent() {
             </div>
             
             <div>
-              <label htmlFor="password" className="block text-lg font-medium mb-2 text-[var(--light-green)]">
+              <label htmlFor="password" className="block text-lg font-medium mb-2 text-[#4F6F52]">
                 Password:
               </label>
               <input
                 type="password"
                 id="password"
-                className="bg-[var(--light-yellow)] text-[var(--dark-green)] w-full py-3 px-4 border border-[var(--light-green)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dark-green)]"
+                className="bg-white text-[#313131] w-full py-3 px-4 border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#313131]"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             
-            <div className="text-[var(--light-green)]">
+            <div className="text-[#4F6F52]">
               <p>
                 Forgot password? {" "} 
-                <Link href="/" className="text-[var(--dark-green)] font-semibold hover:underline">
+                <Link href="/" className="text-[#313131] font-semibold hover:underline">
                   Click Here
                 </Link>
               </p>
               <p className="mt-1">
                 Don't have an account? {" "} 
-                <Link href="/auth/signup" className="text-[var(--dark-green)] font-semibold hover:underline">
+                <Link href="/auth/signup" className="text-[#313131] font-semibold hover:underline">
                   Sign Up
                 </Link>
               </p>
@@ -121,7 +121,7 @@ function LoginContent() {
               {/* 10% Accent Color */}
               <button
                 type="submit"
-                className="bg-[var(--dark-green)] text-[var(--light-yellow)] font-bold py-3 px-6 rounded-md hover:bg-opacity-90 transition-all"
+                className="bg-[#313131] text-white font-bold py-3 px-6 rounded-md hover:bg-opacity-90 transition-all"
               >
                 LOGIN
               </button>
@@ -131,8 +131,8 @@ function LoginContent() {
       </div>
       
       {/* Footer - 30% Secondary Color */}
-      <footer className="bg-[var(--light-green)] py-4 text-center text-[var(--light-yellow)]">
-        <p>© 2025 Your Application Name</p>
+      <footer className="bg-[#4F6F52] py-4 text-center text-white">
+        <p>© 2025 AncesTREE</p>
       </footer>
     </div>
   );

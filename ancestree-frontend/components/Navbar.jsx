@@ -3,10 +3,10 @@
 /**
  * Navbar Component - Redesigned with 60-30-10 Color Rule
  * 
- * Using the earthy color palette:
- * - Light Green (#4F6F52) as 30% secondary color for the navbar background
- * - Dark Green (#1A3324) as 10% accent color for interactive elements
- * - Light Yellow (#F5F5DC) as text and highlight color
+ * Using the provided color palette:
+ * - White (#FFFFFF) as 60% primary color 
+ * - Light Green (#4F6F52) as 30% secondary color
+ * - Dark Gray (#313131) as 10% accent color
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -98,14 +98,14 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="relative top-0 left-0 right-0 bg-[var(--light-green)] text-[var(--light-yellow)] p-2 z-50 border-b-2 border-[var(--dark-green)]">
+    <nav className="relative top-0 left-0 right-0 bg-[#4F6F52] text-white p-2 z-50 border-b-2 border-[#313131]">
       <div className="container mx-auto flex justify-between items-center">
         {/* Logo and Brand */}
         <div className="flex items-center space-x-2">
           <Link href={user ? "/auth/home" : "/"} className="flex items-center">
-            {/* Logo with dark green background and light yellow text */}
-            <div className="h-10 w-10 bg-[var(--dark-green)] border-2 border-[var(--light-yellow)] rounded-md flex items-center justify-center mr-2">
-              <span className="text-xl font-bold text-[var(--light-yellow)]">A</span>
+            {/* Logo with dark accent background and white text */}
+            <div className="h-10 w-10 bg-[#313131] border-2 border-white rounded-md flex items-center justify-center mr-2">
+              <span className="text-xl font-bold text-white">A</span>
             </div>
             <span className="text-xl font-bold">AncesTREE</span>
           </Link>
@@ -116,20 +116,20 @@ export default function Navbar() {
           {user ? (
             /* Links for authenticated users */
             <>
-              <Link href="/auth/home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Home</Link>
-              <Link href="/auth/search" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Search</Link>
-              <Link href="/auth/family-tree" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Family Tree</Link>
-              <Link href="/auth/family-group" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Family Group</Link>
-              <Link href="/auth/gallery" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Gallery</Link>
+              <Link href="/auth/home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Home</Link>
+              <Link href="/auth/search" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Search</Link>
+              <Link href="/auth/family-tree" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Tree</Link>
+              <Link href="/auth/family-group" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Group</Link>
+              <Link href="/auth/gallery" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Gallery</Link>
             </>
           ) : (
             /* Links for non-authenticated users */
             <>
-              <Link href="/" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Home</Link>
-              <Link href="/about" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">About</Link>
-              <Link href="/features" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(26,51,36,0.2)]">Features</Link>
-              <Link href="/auth/login" className="bg-[var(--dark-green)] hover:bg-opacity-90 px-4 py-2 rounded-md transition-colors">Login</Link>
-              <Link href="/auth/signup" className="border-2 border-[var(--dark-green)] hover:bg-[var(--dark-green)] hover:bg-opacity-20 px-4 py-1.5 rounded-md transition-colors">Sign Up</Link>
+              <Link href="/" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Home</Link>
+              <Link href="/about" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">About</Link>
+              <Link href="/features" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Features</Link>
+              <Link href="/auth/login" className="bg-[#313131] hover:bg-opacity-90 px-4 py-2 rounded-md transition-colors">Login</Link>
+              <Link href="/auth/signup" className="border-2 border-[#313131] hover:bg-[#313131] hover:bg-opacity-20 px-4 py-1.5 rounded-md transition-colors">Sign Up</Link>
             </>
           )}
         </div>
@@ -139,10 +139,10 @@ export default function Navbar() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="flex items-center space-x-2 px-3 py-1.5 rounded-md hover:bg-[rgba(26,51,36,0.2)] transition-colors"
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-md hover:bg-[rgba(49,49,49,0.2)] transition-colors"
             >
               {/* User avatar - with user's first initial */}
-              <div className="h-8 w-8 rounded-full bg-[var(--light-yellow)] text-[var(--dark-green)] flex items-center justify-center font-bold">
+              <div className="h-8 w-8 rounded-full bg-white text-[#313131] flex items-center justify-center font-bold">
                 {getInitial()}
               </div>
               <span className="hidden md:inline-block">
@@ -157,23 +157,23 @@ export default function Navbar() {
 
             {/* Dropdown Menu */}
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-[var(--light-yellow)] rounded-md shadow-lg py-1 z-50 border border-[var(--light-green)]">
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-[#4F6F52]">
                 <Link href="/auth/profile">
-                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[var(--dark-green)] hover:bg-[rgba(79,111,82,0.1)]">
+                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Profile
                   </div>
                 </Link>
                 <Link href="/auth/settings">
-                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[var(--dark-green)] hover:bg-[rgba(79,111,82,0.1)]">
+                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Settings
                   </div>
                 </Link>
                 <Link href="/auth/help">
-                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[var(--dark-green)] hover:bg-[rgba(79,111,82,0.1)]">
+                  <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Help
                   </div>
                 </Link>
-                <div className="border-t border-[var(--light-green)] my-1"></div>
+                <div className="border-t border-[#4F6F52] my-1"></div>
                 <div
                   onClick={handleLogout}
                   className="block px-4 py-2 text-sm text-red-600 hover:bg-[rgba(239,68,68,0.1)] cursor-pointer"
@@ -187,7 +187,7 @@ export default function Navbar() {
 
         {/* Mobile menu button */}
         <div className="md:hidden">
-          <button className="text-[var(--light-yellow)] p-1 rounded-md hover:bg-[rgba(26,51,36,0.2)]">
+          <button className="text-white p-1 rounded-md hover:bg-[rgba(49,49,49,0.2)]">
             <svg
               className="h-6 w-6"
               fill="none"
