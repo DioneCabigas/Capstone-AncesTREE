@@ -38,6 +38,12 @@ export default function Signup() {
 
       await sendEmailVerification(user);
 
+      await db.collection('users').doc(user.uid).set({
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+      });
+
       localStorage.setItem(
         "registrationData",
         JSON.stringify({
