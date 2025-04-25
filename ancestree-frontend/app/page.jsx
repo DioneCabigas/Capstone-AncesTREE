@@ -20,3 +20,10 @@ export default function Home() {
     </div>
   );
 }
+
+// TO RUN THE FRONTEND
+// 1. "cd app"
+// 2. "npm run dev"
+
+// IF IT FAILS
+// DO "npm install" to install the new dependencies
