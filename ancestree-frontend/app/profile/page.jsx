@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
-import { Edit, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
+import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
