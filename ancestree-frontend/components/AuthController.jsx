@@ -44,7 +44,8 @@ export default function AuthController({ children, mode = "PROTECT" }) {
       } else if (mode === "REDIRECT") {
         // For auth pages (login/signup): redirect to home if authenticated
         if (authUser && authUser.emailVerified) {
-          router.push("/auth/home");
+          // router.push("/auth/home"); // This is here but naa sad sa login?
+          router.push("/home");
         } else {
           setIsLoading(false);
         }
