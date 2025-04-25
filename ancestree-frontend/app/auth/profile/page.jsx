@@ -2,6 +2,7 @@
 
 /**
  * ProfilePage Component - Redesigned with 60-30-10 Color Rule
+ * With Added Functionality for Viewing Other Users' Profiles
  * 
  * 60% - White (#FFFFFF) - Primary/dominant color
  * 30% - Light Green (#4F6F52) - Secondary color
@@ -13,17 +14,20 @@ import { auth, db } from "@/app/utils/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import Link from 'next/link';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../../components/Navbar';
 import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
 
 function ProfilePage() {
-  const [user, setUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [profileUser, setProfileUser] = useState(null);
+  const [isOwnProfile, setIsOwnProfile] = useState(true);
+  
   // Updated userData structure to match your Firebase structure
   const [userData, setUserData] = useState({
-    firstName: "Arthur",
-    lastName: "Ehem",
+    firstName: "",
+    lastName: "",
     middleName: "",
     suffix: "",
     birthDate: "",
@@ -48,34 +52,72 @@ function ProfilePage() {
   
   const [activeTab, setActiveTab] = useState("details");
   const [activeSection, setActiveSection] = useState("general");
-  const [connections, setConnections] = useState([
-    { id: "user2", name: "User 2" }
-  ]);
+  const [connections, setConnections] = useState([]);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get the userId from URL query params (for viewing other profiles)
+  const userIdFromQuery = searchParams.get('userId');
 
   // Fetch user data on mount
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        setUser(currentUser);
+        setCurrentUser(currentUser);
+        
+        // Determine which user profile to load
+        const targetUserId = userIdFromQuery || currentUser.uid;
+        const isOwn = targetUserId === currentUser.uid;
+        setIsOwnProfile(isOwn);
+        
         try {
-          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          // Load the target user's profile
+          const userDoc = await getDoc(doc(db, "users", targetUserId));
           if (userDoc.exists()) {
             const data = userDoc.data();
             setUserData(prevState => ({
               ...prevState,
               ...data,
-              userId: currentUser.uid
+              userId: targetUserId
             }));
+            
+            // If viewing another user's profile, store their info in profileUser
+            if (!isOwn) {
+              setProfileUser({
+                uid: targetUserId,
+                ...data
+              });
+            }
+          } else if (!isOwn) {
+            // User not found and not own profile
+            setError("User profile not found");
+          }
+          
+          // If own profile, also fetch connections
+          if (isOwn) {
+            try {
+              // This is a placeholder - you'd need to implement your own 
+              // connection fetching logic based on your database structure
+              // Example: const connectionsSnapshot = await getDocs(...);
+              // setConnections(connectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+              
+              // For now using dummy data
+              setConnections([
+                { id: "user2", name: "User 2" }
+              ]);
+            } catch (error) {
+              console.error("Error fetching connections:", error);
+            }
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
+          setError("Error loading profile data");
         }
       }
     });
     
     return () => unsubscribe();
-  }, []);
+  }, [userIdFromQuery]);
 
   // Initialize edited data when entering edit mode
   useEffect(() => {
@@ -109,11 +151,11 @@ function ProfilePage() {
     setError(null);
     
     try {
-      if (!user || !user.uid) {
+      if (!currentUser || !currentUser.uid) {
         throw new Error("User not authenticated");
       }
       
-      const userRef = doc(db, "users", user.uid);
+      const userRef = doc(db, "users", currentUser.uid);
       await updateDoc(userRef, editedData);
       
       // Update local state
@@ -529,6 +571,11 @@ function ProfilePage() {
             <h1 className="text-2xl font-bold text-[#313131]">
               {userData.firstName || "—"} {userData.lastName || "—"}
             </h1>
+            {!isOwnProfile && (
+              <p className="text-sm text-[#4F6F52] mt-1">
+                Viewing another user's profile
+              </p>
+            )}
           </div>
           
           {/* View Tree Button - Accent color (10%) */}
@@ -537,7 +584,7 @@ function ProfilePage() {
           </button>
         </div>
         
-        {/* Tab Navigation */}
+        {/* Tab Navigation - Only show connections tab for own profile */}
         <div className="flex border-b border-gray-200 mb-6">
           <button 
             className={`py-3 px-6 font-medium ${activeTab === "details" 
@@ -548,14 +595,16 @@ function ProfilePage() {
             Personal Details
           </button>
           
-          <button 
-            className={`py-3 px-6 font-medium ${activeTab === "connections" 
-              ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
-              : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
-            onClick={() => setActiveTab("connections")}
-          >
-            Connections
-          </button>
+          {isOwnProfile && (
+            <button 
+              className={`py-3 px-6 font-medium ${activeTab === "connections" 
+                ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
+                : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
+              onClick={() => setActiveTab("connections")}
+            >
+              Connections
+            </button>
+          )}
         </div>
         
         {/* Content Area */}
@@ -608,40 +657,51 @@ function ProfilePage() {
             
             {/* Main Content - White background (60%) */}
             <div className="flex-1 bg-white border border-[#4F6F52] rounded-lg p-6">
-              {/* Add edit/save/cancel buttons here */}
-              <div className="flex justify-end mb-6 space-x-3">
-                {editMode ? (
-                  <>
+              {/* Add edit/save/cancel buttons here - Only show for own profile */}
+              {isOwnProfile && (
+                <div className="flex justify-end mb-6 space-x-3">
+                  {editMode ? (
+                    <>
+                      <button 
+                        onClick={handleSaveChanges}
+                        disabled={isLoading}
+                        className={`px-4 py-2 rounded-md flex items-center gap-2 ${
+                          isLoading 
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
+                            : "bg-[#4F6F52] text-white hover:bg-opacity-90"
+                        }`}
+                      >
+                        <Save size={16} />
+                        <span>{isLoading ? "Saving..." : "Save"}</span>
+                      </button>
+                      <button 
+                        onClick={handleCancelEdit}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-[#313131] hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <X size={16} />
+                        <span>Cancel</span>
+                      </button>
+                    </>
+                  ) : (
                     <button 
-                      onClick={handleSaveChanges}
-                      disabled={isLoading}
-                      className={`px-4 py-2 rounded-md flex items-center gap-2 ${
-                        isLoading 
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
-                          : "bg-[#4F6F52] text-white hover:bg-opacity-90"
-                      }`}
+                      onClick={handleEdit}
+                      className="px-4 py-2 bg-[#313131] text-white rounded-md hover:bg-opacity-90 flex items-center gap-2"
                     >
-                      <Save size={16} />
-                      <span>{isLoading ? "Saving..." : "Save"}</span>
+                      <Edit size={16} />
+                      <span>Edit</span>
                     </button>
-                    <button 
-                      onClick={handleCancelEdit}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-[#313131] hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <X size={16} />
-                      <span>Cancel</span>
-                    </button>
-                  </>
-                ) : (
-                  <button 
-                    onClick={handleEdit}
-                    className="px-4 py-2 bg-[#313131] text-white rounded-md hover:bg-opacity-90 flex items-center gap-2"
-                  >
-                    <Edit size={16} />
-                    <span>Edit</span>
-                  </button>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
+              
+              {/* If viewing another user's profile, show a notice */}
+              {!isOwnProfile && (
+                <div className="mb-6 p-4 bg-[rgba(79,111,82,0.1)] rounded-md">
+                  <p className="text-[#313131]">
+                    You are viewing {userData.firstName}'s profile. This is a read-only view.
+                  </p>
+                </div>
+              )}
               
               {/* Error message */}
               {error && (
@@ -651,11 +711,11 @@ function ProfilePage() {
               )}
               
               {/* Content based on selected section - Toggle between edit fields and view fields */}
-              {editMode ? renderEditFields() : renderViewFields()}
+              {isOwnProfile && editMode ? renderEditFields() : renderViewFields()}
             </div>
           </div>
         ) : (
-          /* Connections Tab */
+          /* Connections Tab - Only for own profile */
           <div className="bg-white border border-[#4F6F52] rounded-lg p-6">
             <h2 className="text-xl font-semibold text-[#313131] mb-6">Connections</h2>
             
@@ -674,6 +734,12 @@ function ProfilePage() {
                     </div>
                     
                     <div className="flex space-x-3">
+                      <button 
+                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
+                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
+                      >
+                        View Profile
+                      </button>
                       <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
                         View Tree
                       </button>
