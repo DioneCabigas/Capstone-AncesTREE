@@ -44,6 +44,31 @@ export default function Navbar() {
     return () => unsubscribe();
   }, []);
 
+  // NEW EFFECT - Listen for user data changes from ProfilePage
+  useEffect(() => {
+    // Function to update userData based on localStorage
+    const handleUserDataChange = () => {
+      const storedFirstName = localStorage.getItem('userFirstName');
+      if (storedFirstName) {
+        setUserData(prevData => ({
+          ...prevData,
+          firstName: storedFirstName
+        }));
+      }
+    };
+
+    // Add event listener for the custom event
+    window.addEventListener('userDataChanged', handleUserDataChange);
+    
+    // Check localStorage on mount in case there's already updated data
+    handleUserDataChange();
+    
+    // Clean up event listener on component unmount
+    return () => {
+      window.removeEventListener('userDataChanged', handleUserDataChange);
+    };
+  }, []);
+
   // Handle clicks outside the dropdown menu to close it
   useEffect(() => {
     function handleClickOutside(event) {

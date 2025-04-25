@@ -2,6 +2,7 @@
 
 /**
  * ProfilePage Component - Redesigned with 60-30-10 Color Rule
+ * With Added Functionality for Viewing Other Users' Profiles
  * 
  * 60% - White (#FFFFFF) - Primary/dominant color
  * 30% - Light Green (#4F6F52) - Secondary color
@@ -11,55 +12,533 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "@/app/utils/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import Link from 'next/link';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
-import { Edit, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
+import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
 
 function ProfilePage() {
-  const [user, setUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [profileUser, setProfileUser] = useState(null);
+  const [isOwnProfile, setIsOwnProfile] = useState(true);
+  
+  // Updated userData structure to match your Firebase structure
   const [userData, setUserData] = useState({
-    firstName: "Arthur",
-    lastName: "Ehem",
-    middleName: "Unknown",
-    suffix: "Unknown",
-    birthDate: "Unknown",
-    deathDate: "Unknown",
-    birthPlace: "Unknown",
-    birthingCenter: "Unknown",
+    firstName: "",
+    lastName: "",
+    middleName: "",
+    suffix: "",
+    birthDate: "",
+    birthPlace: "",
+    streetAddress: "",
+    cityAddress: "",
+    provinceAddress: "",
+    countryAddress: "",
+    zipCode: "",
+    contactNumber: "",
+    telephoneNumber: "",
+    email: "",
     nationality: "",
-    civilStatus: "Unknown",
-    userId: "",
-    address: {
-      street: "Unknown",
-      city: "Unknown",
-      province: "Unknown",
-      country: "Unknown",
-      zipCode: "Unknown"
-    },
-    contact: {
-      homePhone: "Unknown",
-      mobilePhone: "Unknown"
-    }
+    civilStatus: ""
   });
+  
+  // Local state for editing
+  const [editMode, setEditMode] = useState(false);
+  const [editedData, setEditedData] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   
   const [activeTab, setActiveTab] = useState("details");
   const [activeSection, setActiveSection] = useState("general");
-  const [connections, setConnections] = useState([
-    { id: "user2", name: "User 2" }
-  ]);
+  const [connections, setConnections] = useState([]);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get the userId from URL query params (for viewing other profiles)
+  const userIdFromQuery = searchParams.get('userId');
+
+  // Fetch user data on mount
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setCurrentUser(currentUser);
+        
+        // Determine which user profile to load
+        const targetUserId = userIdFromQuery || currentUser.uid;
+        const isOwn = targetUserId === currentUser.uid;
+        setIsOwnProfile(isOwn);
+        
+        try {
+          // Load the target user's profile
+          const userDoc = await getDoc(doc(db, "users", targetUserId));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserData(prevState => ({
+              ...prevState,
+              ...data,
+              userId: targetUserId
+            }));
+            
+            // If viewing another user's profile, store their info in profileUser
+            if (!isOwn) {
+              setProfileUser({
+                uid: targetUserId,
+                ...data
+              });
+            }
+          } else if (!isOwn) {
+            // User not found and not own profile
+            setError("User profile not found");
+          }
+          
+          // If own profile, also fetch connections
+          if (isOwn) {
+            try {
+              // This is a placeholder - you'd need to implement your own 
+              // connection fetching logic based on your database structure
+              // Example: const connectionsSnapshot = await getDocs(...);
+              // setConnections(connectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+              
+              // For now using dummy data
+              setConnections([
+                { id: "user2", name: "User 2" }
+              ]);
+            } catch (error) {
+              console.error("Error fetching connections:", error);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          setError("Error loading profile data");
+        }
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [userIdFromQuery]);
+
+  // Initialize edited data when entering edit mode
+  useEffect(() => {
+    if (editMode) {
+      setEditedData({...userData});
+    }
+  }, [editMode, userData]);
 
   // Handle editing profile information
   const handleEdit = () => {
-    alert("Edit functionality will be implemented later");
+    setEditMode(true);
+  };
+
+  // Handle canceling edit
+  const handleCancelEdit = () => {
+    setEditMode(false);
+    setError(null);
+  };
+
+  // Handle input changes
+  const handleInputChange = (field, value) => {
+    setEditedData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Handle save changes
+  const handleSaveChanges = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      if (!currentUser || !currentUser.uid) {
+        throw new Error("User not authenticated");
+      }
+      
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, editedData);
+      
+      // Update local state
+      setUserData(editedData);
+      setEditMode(false);
+      
+      // Update firstName in localStorage to notify navbar
+      if (editedData.firstName) {
+        try {
+          localStorage.setItem('userFirstName', editedData.firstName || '');
+          // Try to dispatch event but handle any errors
+          try {
+            window.dispatchEvent(new Event('userDataChanged'));
+          } catch (eventError) {
+            console.error("Error dispatching event:", eventError);
+          }
+        } catch (storageError) {
+          console.error("Error updating localStorage:", storageError);
+        }
+      }
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      setError("Failed to save changes. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Handle removing a connection
   const handleRemoveConnection = (connectionId) => {
     setConnections(connections.filter(conn => conn.id !== connectionId));
+  };
+
+  // Render edit fields based on section
+  const renderEditFields = () => {
+    switch (activeSection) {
+      case "general":
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">First Name:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.firstName || ""}
+                  onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Middle Name:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.middleName || ""}
+                  onChange={(e) => handleInputChange('middleName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Last Name:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.lastName || ""}
+                  onChange={(e) => handleInputChange('lastName', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Suffix:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.suffix || ""}
+                  onChange={(e) => handleInputChange('suffix', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Birth Date:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="date"
+                  value={editedData.birthDate || ""}
+                  onChange={(e) => handleInputChange('birthDate', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Birth Place:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.birthPlace || ""}
+                  onChange={(e) => handleInputChange('birthPlace', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Nationality:</div>
+              <div className="text-[#313131]">
+                <input
+                  type="text"
+                  value={editedData.nationality || ""}
+                  onChange={(e) => handleInputChange('nationality', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-right font-medium text-[#4F6F52]">Civil Status:</div>
+              <div className="text-[#313131]">
+                <select
+                  value={editedData.civilStatus || ""}
+                  onChange={(e) => handleInputChange('civilStatus', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                >
+                  <option value="">Select</option>
+                  <option value="Single">Single</option>
+                  <option value="Married">Married</option>
+                  <option value="Widowed">Widowed</option>
+                  <option value="Divorced">Divorced</option>
+                  <option value="Separated">Separated</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        );
+      
+      case "addresses":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                Current Address
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Street Address:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.streetAddress || ""}
+                      onChange={(e) => handleInputChange('streetAddress', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">City:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.cityAddress || ""}
+                      onChange={(e) => handleInputChange('cityAddress', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Province/State:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.provinceAddress || ""}
+                      onChange={(e) => handleInputChange('provinceAddress', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Country:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.countryAddress || ""}
+                      onChange={(e) => handleInputChange('countryAddress', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-right font-medium text-[#4F6F52]">Postal/ZIP Code:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.zipCode || ""}
+                      onChange={(e) => handleInputChange('zipCode', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+        
+      case "contact":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                Contact Information
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Mobile Phone:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.contactNumber || ""}
+                      onChange={(e) => handleInputChange('contactNumber', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Telephone:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="text"
+                      value={editedData.telephoneNumber || ""}
+                      onChange={(e) => handleInputChange('telephoneNumber', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-right font-medium text-[#4F6F52]">Email Address:</div>
+                  <div className="text-[#313131]">
+                    <input
+                      type="email"
+                      value={editedData.email || ""}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+        
+      default:
+        return <p>Select a section to edit</p>;
+    }
+  };
+
+  // Render view-only fields
+  const renderViewFields = () => {
+    switch (activeSection) {
+      case "general":
+        return (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">First Name:</div>
+              <div className="text-[#313131]">{userData.firstName || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Middle Name:</div>
+              <div className="text-[#313131]">{userData.middleName || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Last Name:</div>
+              <div className="text-[#313131]">{userData.lastName || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Suffix:</div>
+              <div className="text-[#313131]">{userData.suffix || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Birth Date:</div>
+              <div className="text-[#313131]">{userData.birthDate || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Birth Place:</div>
+              <div className="text-[#313131]">{userData.birthPlace || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+              <div className="text-right font-medium text-[#4F6F52]">Nationality:</div>
+              <div className="text-[#313131]">{userData.nationality || "—"}</div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-right font-medium text-[#4F6F52]">Civil Status:</div>
+              <div className="text-[#313131]">{userData.civilStatus || "—"}</div>
+            </div>
+          </div>
+        );
+      
+      case "addresses":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                Current Address
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Street Address:</div>
+                  <div className="text-[#313131]">{userData.streetAddress || "—"}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">City:</div>
+                  <div className="text-[#313131]">{userData.cityAddress || "—"}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Province/State:</div>
+                  <div className="text-[#313131]">{userData.provinceAddress || "—"}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Country:</div>
+                  <div className="text-[#313131]">{userData.countryAddress || "—"}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-right font-medium text-[#4F6F52]">Postal/ZIP Code:</div>
+                  <div className="text-[#313131]">{userData.zipCode || "—"}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      
+      case "contact":
+        return (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                Contact Information
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Mobile Phone:</div>
+                  <div className="text-[#313131]">{userData.contactNumber || "—"}</div>
+                </div>
+                      
+                <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                  <div className="text-right font-medium text-[#4F6F52]">Telephone:</div>
+                  <div className="text-[#313131]">{userData.telephoneNumber || "—"}</div>
+                </div>
+                      
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-right font-medium text-[#4F6F52]">Email Address:</div>
+                  <div className="text-[#313131]">{userData.email || "—"}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      
+      default:
+        return <p>Select a section to view</p>;
+    }
   };
 
   return (
@@ -78,7 +557,8 @@ function ProfilePage() {
           <div className="absolute left-8 bottom-0 transform translate-y-1/2">
             <div className="w-32 h-32 rounded-full bg-white border-4 border-white overflow-hidden flex items-center justify-center">
               <span className="text-[#313131] text-5xl font-bold">
-                {userData.firstName.charAt(0)}{userData.lastName.charAt(0)}
+                {userData.firstName ? userData.firstName.charAt(0) : ""}
+                {userData.lastName ? userData.lastName.charAt(0) : ""}
               </span>
             </div>
           </div>
@@ -87,10 +567,15 @@ function ProfilePage() {
         {/* Profile Info Bar - White background (60%) */}
         <div className="bg-white shadow-md rounded-b-lg pt-20 pb-4 px-8 mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm text-gray-600 mb-1">ID: {userData.userId}</p>
+            <p className="text-sm text-gray-600 mb-1">ID: {userData.userId || "—"}</p>
             <h1 className="text-2xl font-bold text-[#313131]">
-              {userData.firstName} {userData.lastName}
+              {userData.firstName || "—"} {userData.lastName || "—"}
             </h1>
+            {!isOwnProfile && (
+              <p className="text-sm text-[#4F6F52] mt-1">
+                Viewing another user's profile
+              </p>
+            )}
           </div>
           
           {/* View Tree Button - Accent color (10%) */}
@@ -99,7 +584,7 @@ function ProfilePage() {
           </button>
         </div>
         
-        {/* Tab Navigation */}
+        {/* Tab Navigation - Only show connections tab for own profile */}
         <div className="flex border-b border-gray-200 mb-6">
           <button 
             className={`py-3 px-6 font-medium ${activeTab === "details" 
@@ -110,14 +595,16 @@ function ProfilePage() {
             Personal Details
           </button>
           
-          <button 
-            className={`py-3 px-6 font-medium ${activeTab === "connections" 
-              ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
-              : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
-            onClick={() => setActiveTab("connections")}
-          >
-            Connections
-          </button>
+          {isOwnProfile && (
+            <button 
+              className={`py-3 px-6 font-medium ${activeTab === "connections" 
+                ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
+                : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
+              onClick={() => setActiveTab("connections")}
+            >
+              Connections
+            </button>
+          )}
         </div>
         
         {/* Content Area */}
@@ -170,95 +657,65 @@ function ProfilePage() {
             
             {/* Main Content - White background (60%) */}
             <div className="flex-1 bg-white border border-[#4F6F52] rounded-lg p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-[#313131]">
-                  {activeSection === "general" && "General Information"}
-                  {activeSection === "addresses" && "Addresses"}
-                  {activeSection === "vital" && "Vital Information"}
-                  {activeSection === "interests" && "Personal Interests"}
-                  {activeSection === "contact" && "Contact Information"}
-                </h2>
-                
-                {/* Edit button - Secondary color (30%) */}
-                <button 
-                  onClick={handleEdit}
-                  className="p-2 text-[#4F6F52] hover:bg-[rgba(79,111,82,0.1)] rounded-full"
-                >
-                  <Edit size={20} />
-                </button>
-              </div>
-              
-              {/* Content based on selected section */}
-              {activeSection === "general" && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">First Name:</div>
-                    <div className="text-[#313131]">{userData.firstName}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Middle Name:</div>
-                    <div className="text-[#313131]">{userData.middleName}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Last Name:</div>
-                    <div className="text-[#313131]">{userData.lastName}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Suffix:</div>
-                    <div className="text-[#313131]">{userData.suffix}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Birth Date:</div>
-                    <div className="text-[#313131]">{userData.birthDate}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Death Date:</div>
-                    <div className="text-[#313131]">{userData.deathDate}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Birth Place:</div>
-                    <div className="text-[#313131]">{userData.birthPlace}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Birthing Center:</div>
-                    <div className="text-[#313131]">{userData.birthingCenter}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
-                    <div className="text-right font-medium text-[#4F6F52]">Nationality:</div>
-                    <div className="text-[#313131]">{userData.nationality || "—"}</div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-right font-medium text-[#4F6F52]">Civil Status:</div>
-                    <div className="text-[#313131]">{userData.civilStatus}</div>
-                  </div>
+              {/* Add edit/save/cancel buttons here - Only show for own profile */}
+              {isOwnProfile && (
+                <div className="flex justify-end mb-6 space-x-3">
+                  {editMode ? (
+                    <>
+                      <button 
+                        onClick={handleSaveChanges}
+                        disabled={isLoading}
+                        className={`px-4 py-2 rounded-md flex items-center gap-2 ${
+                          isLoading 
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
+                            : "bg-[#4F6F52] text-white hover:bg-opacity-90"
+                        }`}
+                      >
+                        <Save size={16} />
+                        <span>{isLoading ? "Saving..." : "Save"}</span>
+                      </button>
+                      <button 
+                        onClick={handleCancelEdit}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-[#313131] hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <X size={16} />
+                        <span>Cancel</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      onClick={handleEdit}
+                      className="px-4 py-2 bg-[#313131] text-white rounded-md hover:bg-opacity-90 flex items-center gap-2"
+                    >
+                      <Edit size={16} />
+                      <span>Edit</span>
+                    </button>
+                  )}
                 </div>
               )}
               
-              {activeSection === "addresses" && (
-                <div className="p-4 text-center text-gray-500">
-                  Address information would appear here
+              {/* If viewing another user's profile, show a notice */}
+              {!isOwnProfile && (
+                <div className="mb-6 p-4 bg-[rgba(79,111,82,0.1)] rounded-md">
+                  <p className="text-[#313131]">
+                    You are viewing {userData.firstName}'s profile. This is a read-only view.
+                  </p>
                 </div>
               )}
-             
               
-              {activeSection === "contact" && (
-                <div className="p-4 text-center text-gray-500">
-                  Contact information would appear here
+              {/* Error message */}
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-md">
+                  {error}
                 </div>
               )}
+              
+              {/* Content based on selected section - Toggle between edit fields and view fields */}
+              {isOwnProfile && editMode ? renderEditFields() : renderViewFields()}
             </div>
           </div>
         ) : (
-          /* Connections Tab */
+          /* Connections Tab - Only for own profile */
           <div className="bg-white border border-[#4F6F52] rounded-lg p-6">
             <h2 className="text-xl font-semibold text-[#313131] mb-6">Connections</h2>
             
@@ -277,6 +734,12 @@ function ProfilePage() {
                     </div>
                     
                     <div className="flex space-x-3">
+                      <button 
+                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
+                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
+                      >
+                        View Profile
+                      </button>
                       <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
                         View Tree
                       </button>
