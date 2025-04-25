@@ -26,14 +26,17 @@ function SignupContent() {
   const [lastName, setLastName] = useState("");
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSignup = async (event) => {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setIsSubmitting(true);
 
     if (password !== confirmPassword) {
       setError("Passwords do not match!");
+      setIsSubmitting(false);
       return;
     }
 
@@ -43,14 +46,54 @@ function SignupContent() {
 
       await sendEmailVerification(user);
 
-      localStorage.setItem(
-        "registrationData",
-        JSON.stringify({
-          firstName,
-          lastName,
-          email,
-        })
-      );
+      // 04/25/2025 - Send the registration data to the backend -Dione
+      const registrationData = {
+        uid: user.uid,
+        firstName,
+        lastName,
+        email,
+        middleName: '',
+        suffix: '',
+        birthDate: '',
+        birthPlace: '',
+        nationality: '',
+        civilStatus: '',
+        // Address fields
+        streetAddress: '',
+        cityAddress: '',
+        provinceAddress: '',
+        countryAddress: '',
+        zipCode: '',
+        // Contact fields (Wla nko gi apil diri ang email but part gihapon sya ari -Dione)
+        contactNumber: '',
+        telephoneNumber: '',
+      };
+
+      const response = await fetch('http://localhost:3001/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.message || 'Failed to complete registration.');
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // We dont need this anymore since we are sending the data to the backend -Dione
+      
+      // localStorage.setItem(
+      //   "registrationData",
+      //   JSON.stringify({
+      //     firstName,
+      //     lastName,
+      //     email,
+      //   })
+      // );
 
       setMessage(
         "Registration Successful! Please check your Email for verification."
@@ -61,12 +104,14 @@ function SignupContent() {
       setEmail("");
       setPassword("");
       setConfirmPassword("");
+      setIsSubmitting(false);
 
     } catch (error) {
       if(error instanceof Error){
         setError(error.message);
       } else {
         setError("An unknown error occurred, please try again.");
+        setIsSubmitting(false);
       }
     }
   };
@@ -168,8 +213,10 @@ function SignupContent() {
               <button
                 type="submit"
                 className="bg-[#313131] text-white font-bold py-3 px-6 rounded-md hover:bg-opacity-90 transition-all"
+                disabled={isSubmitting}
               >
-                SUBMIT
+                {/* SUBMIT */}
+                {isSubmitting ? 'Signing Up...' : 'SUBMIT'}
               </button>
             </div>
           </form>

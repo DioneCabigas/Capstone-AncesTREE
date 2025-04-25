@@ -47,7 +47,7 @@ function LoginContent() {
             email: user.email,
           });
         }
-        router.push("/auth/home");
+        router.push("/home"); // Di nani sya ma read
       } else {
         setError("Please verify your email before logging in.")
       }

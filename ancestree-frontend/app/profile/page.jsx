@@ -15,7 +15,7 @@ import { doc, getDoc } from "firebase/firestore";
 import Link from 'next/link';
 import { useRouter } from "next/navigation";
 import AuthController from '@/components/AuthController';
-import Navbar from '../../../components/Navbar';
+import Navbar from '../../components/Navbar';
 import { Edit, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
 
 function ProfilePage() {
