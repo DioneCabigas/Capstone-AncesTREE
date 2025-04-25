@@ -127,7 +127,7 @@ export default function Navbar() {
       <div className="container mx-auto flex justify-between items-center">
         {/* Logo and Brand */}
         <div className="flex items-center space-x-2">
-          <Link href={user ? "/auth/home" : "/"} className="flex items-center">
+          <Link href={user ? "/home" : "/"} className="flex items-center">
             {/* Logo with dark accent background and white text */}
             <div className="h-10 w-10 bg-[#313131] border-2 border-white rounded-md flex items-center justify-center mr-2">
               <span className="text-xl font-bold text-white">A</span>
@@ -141,11 +141,11 @@ export default function Navbar() {
           {user ? (
             /* Links for authenticated users */
             <>
-              <Link href="/auth/home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Home</Link>
-              <Link href="/auth/search" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Search</Link>
-              <Link href="/auth/family-tree" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Tree</Link>
-              <Link href="/auth/family-group" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Group</Link>
-              <Link href="/auth/gallery" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Gallery</Link>
+              <Link href="/home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Home</Link>
+              <Link href="/search" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Search</Link>
+              <Link href="/family-tree" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Tree</Link>
+              <Link href="/family-group" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Family Group</Link>
+              <Link href="/gallery" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Gallery</Link>
             </>
           ) : (
             /* Links for non-authenticated users */
@@ -183,17 +183,17 @@ export default function Navbar() {
             {/* Dropdown Menu */}
             {menuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-[#4F6F52]">
-                <Link href="/auth/profile">
+                <Link href="/profile">
                   <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Profile
                   </div>
                 </Link>
-                <Link href="/auth/settings">
+                <Link href="/settings">
                   <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Settings
                   </div>
                 </Link>
-                <Link href="/auth/help">
+                <Link href="/help">
                   <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
                     Help
                   </div>
