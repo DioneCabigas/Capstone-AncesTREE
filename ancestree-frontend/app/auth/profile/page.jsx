@@ -244,15 +244,67 @@ function ProfilePage() {
               )}
               
               {activeSection === "addresses" && (
-                <div className="p-4 text-center text-gray-500">
-                  Address information would appear here
+                <div className="space-y-6">
+                  {/* Current Address */}
+                  <div>
+                    <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                      Current Address
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">Street Address:</div>
+                        <div className="text-[#313131]">{userData.address.street || "—"}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">City:</div>
+                        <div className="text-[#313131]">{userData.address.city || "—"}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">Province/State:</div>
+                        <div className="text-[#313131]">{userData.address.province || "—"}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">Country:</div>
+                        <div className="text-[#313131]">{userData.address.country || "—"}</div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-right font-medium text-[#4F6F52]">Postal/ZIP Code:</div>
+                        <div className="text-[#313131]">{userData.address.zipCode || "—"}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
              
               
               {activeSection === "contact" && (
-                <div className="p-4 text-center text-gray-500">
-                  Contact information would appear here
+                <div className="space-y-6">
+                  {/* Contact Information */}
+                  <div>
+                    <h3 className="text-lg font-medium text-[#313131] mb-3 pb-2 border-b border-gray-100">
+                      Contact Information
+                    </h3>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">Mobile Phone:</div>
+                        <div className="text-[#313131]">{userData.contact.mobilePhone || "—"}</div>
+                      </div>
+                            
+                      <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
+                        <div className="text-right font-medium text-[#4F6F52]">Telephone:</div>
+                        <div className="text-[#313131]">{userData.contact.telephone || "—"}</div>
+                      </div>
+                            
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-right font-medium text-[#4F6F52]">Email Address:</div>
+                        <div className="text-[#313131]">{userData.contact.email || "—"}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
