@@ -119,6 +119,21 @@ function ProfilePage() {
       // Update local state
       setUserData(editedData);
       setEditMode(false);
+      
+      // Update firstName in localStorage to notify navbar
+      if (editedData.firstName) {
+        try {
+          localStorage.setItem('userFirstName', editedData.firstName || '');
+          // Try to dispatch event but handle any errors
+          try {
+            window.dispatchEvent(new Event('userDataChanged'));
+          } catch (eventError) {
+            console.error("Error dispatching event:", eventError);
+          }
+        } catch (storageError) {
+          console.error("Error updating localStorage:", storageError);
+        }
+      }
     } catch (error) {
       console.error("Error updating profile:", error);
       setError("Failed to save changes. Please try again.");
