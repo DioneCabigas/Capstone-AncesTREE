@@ -98,46 +98,54 @@ function SearchUsers() {
   }, [searchTerm, cityFilter, countryFilter]); 
 
   return (
-    <div className="bg-white bg-cover p-5;">
-      <h2>User Search</h2>
+    <div className="min-h-screen bg-white px-4 py-10">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white shadow-lg rounded-lg border border-[#4F6F52] p-8 mb-10">
+        <h2 className="text-2xl font-bold mb-6 text-black">USER SEARCH</h2>
 
-      <input
-        type="text"
-        placeholder="Search by first or last name"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="mb-2.5 p-2 w-80"
-      />
-      <br />
+        <div className="space-y-4">
+          <input
+            type="text"
+            placeholder="Search by first or last name"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="p-3 w-full border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+          />
+          <input
+            type="text"
+            placeholder="Filter by City"
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            className="p-3 w-full border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52]"
+          />
+          <input
+            type="text"
+            placeholder="Filter by Country"
+            value={countryFilter}
+            onChange={(e) => setCountryFilter(e.target.value)}
+            className="p-3 w-full border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#4F6F52] mb-5"
+          />
+        </div>
 
-      <input
-        type="text"
-        placeholder="Filter by City"
-        value={cityFilter}
-        onChange={(e) => setCityFilter(e.target.value)}
-        className="mb-2.5 p-2 w-80"
-      />
-      <br />
-
-      <input
-        type="text"
-        placeholder="Filter by Country"
-        value={countryFilter}
-        onChange={(e) => setCountryFilter(e.target.value)}
-        className="mb-2.5 p-2 w-80"
-      />
-      <br />
-
-      {loading && <p>Loading...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-
-      <ul>
-        {searchResults.map((user) => (
-          <li key={user.id}>
-            {user.firstName} {user.lastName} ({user.cityAddress}, {user.countryAddress})
-          </li>
-        ))}
-      </ul>
+          {loading && <p>Loading...</p>}
+          {error && <p style={{ color: 'red' }}>{error}</p>}
+          
+        </div>
+        <div className="justify-center items-center place-items-center">
+          <ul className="">
+              {searchResults.map((user) => (
+                <li key={user.id}>
+                  <a
+                    href={`/profile?userId=${user.id}`}
+                    className="text-[#4F6F52] hover:underline font-medium"
+                  >
+                    {user.firstName} {user.lastName} ({user.cityAddress}, {user.countryAddress})
+                  </a>
+                </li>
+              ))}
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
