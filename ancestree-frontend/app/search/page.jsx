@@ -98,7 +98,7 @@ function SearchUsers() {
   }, [searchTerm, cityFilter, countryFilter]); 
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div className="bg-white bg-cover p-5;">
       <h2>User Search</h2>
 
       <input
@@ -106,7 +106,7 @@ function SearchUsers() {
         placeholder="Search by first or last name"
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        style={{ marginBottom: '10px', padding: '8px', width: '300px' }}
+        className="mb-2.5 p-2 w-80"
       />
       <br />
 
@@ -115,7 +115,7 @@ function SearchUsers() {
         placeholder="Filter by City"
         value={cityFilter}
         onChange={(e) => setCityFilter(e.target.value)}
-        style={{ marginBottom: '10px', padding: '8px', width: '300px' }}
+        className="mb-2.5 p-2 w-80"
       />
       <br />
 
@@ -124,7 +124,7 @@ function SearchUsers() {
         placeholder="Filter by Country"
         value={countryFilter}
         onChange={(e) => setCountryFilter(e.target.value)}
-        style={{ marginBottom: '20px', padding: '8px', width: '300px' }}
+        className="mb-2.5 p-2 w-80"
       />
       <br />
 
