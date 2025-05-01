@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+@import "tailwindcss";
+
+/* Updated color scheme using the 60-30-10 rule */
+:root {
+  /* Primary color (60%) */
+  --primary-color: #FFFFFF;
+  
+  /* Secondary color (30%) */
+  --secondary-color: #4F6F52;
+  
+  /* Accent color (10%) */
+  --accent-color: #313131;
+  
+  /* Keep original variable names for backwards compatibility */
+  --dark-green: #313131;    /* Updated to our accent color */
+  --light-green: #4F6F52;   /* Kept the same as our secondary color */
+  --light-yellow: #FFFFFF;  /* Updated to our primary color */
+  --white: #FFFFFF;         /* Primary color */
+  --black: #313131;         /* Accent color */
+  --gray: #D9D9D9;          /* Kept the same */
+}
+
+/* Settings Fonts */
+* {
+  font-family: Poppins, Arial, Helvetica, sans-serif;
+}
+
+body {
+  background-image: url(/images/leavesBG.jpg);
+  background-position: center;
+  background-size: cover;
+  min-height: 100vh;
+  color: var(--accent-color); /* Default text color */
+}
+
+
+/* Button styles using our color scheme */
+.btn-primary {
+  background-color: var(--secondary-color);
+  color: var(--primary-color);
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-color);
+}
+
+.btn-secondary {
+  background-color: var(--accent-color);
+  color: var(--primary-color);
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  opacity: 0.9;
+}
+
+/* Card styles using our color scheme */
+.card {
+  background-color: var(--primary-color);
+  border: 1px solid var(--secondary-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  background-color: var(--secondary-color);
+  color: var(--primary-color);
+  padding: 1rem;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+}
+
+/* Container with slight transparency for better readability over background image */
+.content-container {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 1rem 0;
+}

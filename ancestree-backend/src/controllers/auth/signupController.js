@@ -1,43 +1,18 @@
-const { auth, db } = require('../../config/database');
+const signupService = require('../../services/auth/signupService');
 
-// Signup controller - handles user registration
-const signupController = async (req, res) => {
+exports.signup = async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) return res.status(400).json({ error: 'Required fields missing' });
+
   try {
-    const { email, password, displayName } = req.body;
+
+    const userRecord = await signupService.createUser(email, password);
+    const userData = await signupService.storeUserData(userRecord.uid, email);
     
-    // Create user with Firebase Auth
-    const userRecord = await auth.createUser({
-      email,
-      password,
-      displayName
-    });
-    
-    // Create a user document in Firestore
-    await db.collection('users').doc(userRecord.uid).set({
-      email: userRecord.email,
-      displayName: userRecord.displayName,
-      createdAt: new Date().toISOString(),
-      photoURL: userRecord.photoURL || '',
-      lastLogin: new Date().toISOString()
-    });
-    
-    return res.status(201).json({ 
-      success: true, 
-      message: 'User created successfully',
-      user: {
-        uid: userRecord.uid,
-        email: userRecord.email,
-        displayName: userRecord.displayName
-      } 
-    });
+    res.status(201).json({ message: 'User created', uid: userRecord.uid, userData });
+
   } catch (error) {
-    console.error('Signup error:', error);
-    return res.status(400).json({ 
-      success: false, 
-      message: 'User creation failed',
-      error: error.message 
-    });
+    res.status(400).json({ error: error.message });
   }
 };
-
-module.exports = signupController;

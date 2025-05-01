@@ -1,18 +1,9 @@
-// Firebase Firestore configuration
 const admin = require('firebase-admin');
-const serviceAccount = require('../../service-account.json');
+const serviceAccount = require('./capstone-ancestree-firebase-adminsdk-fbsvc-01838b417d.json'); 
+// If mo gamit mo sa database kay generate your own key sa firebase and I-paste sa config directory ang JSON file
 
-// Initialize Firebase Admin
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-const db = admin.firestore();
-const auth = admin.auth();
-const storage = admin.storage();
-
-module.exports = {
-  db,
-  auth,
-  storage
-};
+module.exports = admin;

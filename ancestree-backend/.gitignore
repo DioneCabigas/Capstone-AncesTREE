@@ -4,7 +4,6 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-
 # Environment Variables
 .env
 .env.local
@@ -15,23 +14,31 @@ pnpm-lock.yaml
 src/config/capstone-ancestree-firebase-adminsdk-fbsvc-650a69d943.json
 src/config/capstone-ancestree-firebase-adminsdk-fbsvc-01838b417d.json
 src/config/capstone-ancestree-firebase-adminsdk-fbsvc-3a06b2436e.json
-
 # Next.js Build Output (Frontend)
 .next/
 out/
 build/
 
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Cache and Temp Files (Frontend/General)
+.cache/
+.turbo/
 
-# Operating System Files
-.DS_Store
-Thumbs.db
+# Logs
+*.log
 
-# Editor directories and files
+# IDE specific files
 .idea/
 .vscode/
-*.swp
-*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# macOS specific files
+.DS_Store
+
+# Optional: Ignore bundled dependencies
+# bundled/
+
+# Optional: Ignore coverage reports
+# coverage/
