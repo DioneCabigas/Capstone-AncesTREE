@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "ancestree-backend/src/server.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "ancestree-frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "ancestree-backend/src/server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "ancestree-frontend/$1"
+    }
+  ]
+}
