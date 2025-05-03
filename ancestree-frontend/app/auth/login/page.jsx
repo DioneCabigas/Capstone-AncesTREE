@@ -1,13 +1,5 @@
 'use client'
 
-/**
- * Login Page Component - Redesigned with 60-30-10 Color Rule
- * 
- * 60% - White (#FFFFFF) - Primary/dominant color
- * 30% - Light Green (#4F6F52) - Secondary color
- * 10% - Dark Gray (#313131) - Accent color
- */
-
 import Navbar from '../../../components/Navbar';
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -47,7 +39,7 @@ function LoginContent() {
             email: user.email,
           });
         }
-        router.push("/home"); // Di nani sya ma read
+        router.push("/home");
       } else {
         setError("Please verify your email before logging in.")
       }
@@ -61,81 +53,59 @@ function LoginContent() {
   };
 
   return (
-    <div className="relative min-h-screen bg-white flex flex-col">
-      {/* Navbar - 30% Secondary Color */}
-      <Navbar />
-
-      {/* Main Content - 60% Dominant Color (white background) */}
-      <div className="flex-grow flex items-center justify-center px-4 py-10 content-container">
-        {/* Login Form Card */}
-        <div className="bg-white shadow-lg rounded-lg border border-[#4F6F52] w-full max-w-md p-8">
-          <h2 className="text-2xl font-bold mb-8 text-[#313131]">WELCOME BACK!</h2>
-          
-          <form className="space-y-5" onSubmit={onLogin}>
-            <div>
-              <label htmlFor="email" className="block text-lg font-medium mb-2 text-[#313131]">
-                Email Address:
-              </label>
+    <div className="flex min-h-screen">
+      {/* Left side - Login form */}
+      <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-white px-4 md:px-8">
+        <div className="w-full max-w-sm">
+  
+          <h2 className="text-4xl font-bold text-center mb-1"><span className="text-[#365643]">WELCOME</span> BACK!</h2>
+          <p className="text-sm text-gray-500 text-center mb-6">Ready to manage your Family Tree again?</p>
+  
+          <form className="pt-6">
+            <div className="mb-4">
+              <label className="block text-gray-700 text-base mb-2">Email</label>
               <input
                 type="email"
-                id="email"
-                className="bg-white text-[#313131] w-full py-3 px-4 border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#313131]"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:border-[#365643]"
                 required
               />
             </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-lg font-medium mb-2 text-[#313131]">
-                Password:
-              </label>
+  
+            <div className="mb-4">
+              <label className="block text-gray-700 text-base mb-2">Password</label>
               <input
                 type="password"
-                id="password"
-                className="bg-white text-[#313131] w-full py-3 px-4 border border-[#4F6F52] rounded-md focus:outline-none focus:ring-2 focus:ring-[#313131]"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring focus:border-[#365643]"
                 required
               />
             </div>
-            
-            <div className="text-[#313131]">
-              <p>
-                Forgot password? {" "} 
-                <Link href="/" className="text-[#313131] font-semibold hover:underline">
-                  Click Here
-                </Link>
-              </p>
-              <p className="mt-1">
-                Don't have an account? {" "} 
-                <Link href="/auth/signup" className="text-[#313131] font-semibold hover:underline">
-                  Sign Up
-                </Link>
-              </p>
+  
+            <div className="text-right text-sm mb-6 pb-5">
+              <a href="#" className="text-[#365643] hover:underline">Forgot Password?</a>
             </div>
-            
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            
-            <div className="flex justify-end mt-8">
-              {/* 10% Accent Color */}
-              <button
-                type="submit"
-                className="bg-[#4F6F52] text-white font-bold py-3 px-6 rounded-md hover:scale-105 transition-all"
-              >
-                LOGIN
-              </button>
-            </div>
+  
+            <button
+              type="submit"
+              className="w-full bg-[#365643] hover:bg-green-700 text-white py-2 px-4 rounded-md"
+            >
+              LOGIN
+            </button>
+  
+            <p className="text-sm text-center mt-6 text-gray-700">
+              Don’t have an account? <a href="/auth/signup" className="text-[#365643] hover:underline">Sign Up</a>
+            </p>
           </form>
         </div>
       </div>
-      
-      {/* Footer - 30% Secondary Color */}
-      <footer className="bg-[#4F6F52] py-4 text-center text-white">
-        <p>© 2025 AncesTREE</p>
-      </footer>
+  
+      {/* Right side - Background image */}
+      <div
+        className="hidden md:block md:w-1/2 bg-cover bg-center"
+        style={{ backgroundImage: `url('/forest.jpg')` }}
+      ></div>
     </div>
   );
+  
 }
 
 export default function Login() {
