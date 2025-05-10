@@ -184,7 +184,7 @@ function SignupContent() {
   
             <p className="text-sm text-center mt-6 text-gray-700">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-[#365643] hover:underline">Login</Link>
+              <Link href="/auth/login" className="text-[#365643] hover:underline font-semibold">Login</Link>
             </p>
           </form>
         </div>
@@ -193,7 +193,7 @@ function SignupContent() {
       {/* Right side - Background image */}
       <div
         className="hidden md:block md:w-1/2 bg-cover bg-center"
-        style={{ backgroundImage: `url('/forest.jpg')` }}
+        style={{ backgroundImage: `url('/images/treeBG.jpg')` }}
       ></div>
     </div>
   );

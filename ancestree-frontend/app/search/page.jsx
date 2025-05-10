@@ -127,7 +127,7 @@ function SearchUsers() {
           />
         </div>
 
-          {loading && <p>Loading...</p>}
+          {loading && <p>Searching...</p>}
           {error && <p style={{ color: 'red' }}>{error}</p>}
           
         </div>

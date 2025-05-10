@@ -92,7 +92,7 @@ function LoginContent() {
             </button>
   
             <p className="text-sm text-center mt-6 text-gray-700">
-              Don’t have an account? <a href="/auth/signup" className="text-[#365643] hover:underline">Sign Up</a>
+              Don’t have an account? <a href="/auth/signup" className="text-[#365643] hover:underline font-semibold">Sign Up</a>
             </p>
           </form>
         </div>
@@ -101,7 +101,7 @@ function LoginContent() {
       {/* Right side - Background image */}
       <div
         className="hidden md:block md:w-1/2 bg-cover bg-center"
-        style={{ backgroundImage: `url('/forest.jpg')` }}
+        style={{ backgroundImage: `url('/images/treeBG.jpg')` }}
       ></div>
     </div>
   );

@@ -13,7 +13,7 @@ pnpm-lock.yaml
 # Firebase Service Account Key (Backend)
 src/config/capstone-ancestree-firebase-adminsdk-fbsvc-650a69d943.json
 src/config/capstone-ancestree-firebase-adminsdk-fbsvc-01838b417d.json
-
+src/config/capstone-ancestree-firebase-adminsdk-fbsvc-3a06b2436e.json
 # Next.js Build Output (Frontend)
 .next/
 out/
