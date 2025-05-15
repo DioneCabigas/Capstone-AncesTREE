@@ -3,7 +3,6 @@
 /**
  * ProfilePage Component - Redesigned with 60-30-10 Color Rule
  * With Added Functionality for Viewing Other Users' Profiles
- * Modified to use backend API instead of direct Firebase access
  * 
  * 60% - White (#FFFFFF) - Primary/dominant color
  * 30% - Light Green (#4F6F52) - Secondary color
@@ -11,32 +10,14 @@
  */
 
 import { useState, useEffect } from "react";
-import { auth } from "@/app/utils/firebase";
+import { auth, db } from "@/app/utils/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
 import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
-import axios from 'axios'; // Make sure axios is installed
-
-// Setup API client with base URL
-const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api',
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
-
-// Add auth token to requests
-api.interceptors.request.use(async (config) => {
-  const user = auth.currentUser;
-  if (user) {
-    const token = await user.getIdToken();
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -78,60 +59,6 @@ function ProfilePage() {
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
 
-  // Fetch user data from backend API
-  const fetchUserData = async (userId) => {
-    try {
-      const response = await api.get(`/users/${userId}`);
-      if (response.data) {
-        setUserData(prevState => ({
-          ...prevState,
-          ...response.data,
-          userId: userId
-        }));
-        return response.data;
-      }
-      return null;
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-      setError("Error loading profile data");
-      return null;
-    }
-  };
-
-  // Fetch user connections from backend API
-  const fetchUserConnections = async (userId) => {
-    try {
-      const response = await api.get(`/users/${userId}/connections`);
-      if (response.data) {
-        setConnections(response.data);
-      }
-    } catch (error) {
-      console.error("Error fetching connections:", error);
-    }
-  };
-
-  // Update user data through backend API
-  const updateUserData = async (userId, data) => {
-    try {
-      await api.put(`/users/${userId}`, data);
-      return true;
-    } catch (error) {
-      console.error("Error updating user data:", error);
-      throw error;
-    }
-  };
-
-  // Remove a connection through backend API
-  const removeConnection = async (userId, connectionId) => {
-    try {
-      await api.delete(`/users/${userId}/connections/${connectionId}`);
-      return true;
-    } catch (error) {
-      console.error("Error removing connection:", error);
-      throw error;
-    }
-  };
-
   // Fetch user data on mount
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -145,25 +72,45 @@ function ProfilePage() {
         
         try {
           // Load the target user's profile
-          const userData = await fetchUserData(targetUserId);
-          
-          // If viewing another user's profile, store their info in profileUser
-          if (!isOwn && userData) {
-            setProfileUser({
-              uid: targetUserId,
-              ...userData
-            });
-          } else if (!isOwn && !userData) {
+          const userDoc = await getDoc(doc(db, "users", targetUserId));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setUserData(prevState => ({
+              ...prevState,
+              ...data,
+              userId: targetUserId
+            }));
+            
+            // If viewing another user's profile, store their info in profileUser
+            if (!isOwn) {
+              setProfileUser({
+                uid: targetUserId,
+                ...data
+              });
+            }
+          } else if (!isOwn) {
             // User not found and not own profile
             setError("User profile not found");
           }
           
           // If own profile, also fetch connections
           if (isOwn) {
-            await fetchUserConnections(currentUser.uid);
+            try {
+              // This is a placeholder - you'd need to implement your own 
+              // connection fetching logic based on your database structure
+              // Example: const connectionsSnapshot = await getDocs(...);
+              // setConnections(connectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+              
+              // For now using dummy data
+              setConnections([
+                { id: "user2", name: "User 2" }
+              ]);
+            } catch (error) {
+              console.error("Error fetching connections:", error);
+            }
           }
         } catch (error) {
-          console.error("Error in initial data loading:", error);
+          console.error("Error fetching user data:", error);
           setError("Error loading profile data");
         }
       }
@@ -208,8 +155,8 @@ function ProfilePage() {
         throw new Error("User not authenticated");
       }
       
-      // Update user data through backend API
-      await updateUserData(currentUser.uid, editedData);
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, editedData);
       
       // Update local state
       setUserData(editedData);
@@ -238,21 +185,8 @@ function ProfilePage() {
   };
 
   // Handle removing a connection
-  const handleRemoveConnection = async (connectionId) => {
-    try {
-      if (!currentUser || !currentUser.uid) {
-        throw new Error("User not authenticated");
-      }
-      
-      // Remove connection through backend API
-      await removeConnection(currentUser.uid, connectionId);
-      
-      // Update local state
-      setConnections(connections.filter(conn => conn.id !== connectionId));
-    } catch (error) {
-      console.error("Error removing connection:", error);
-      setError("Failed to remove connection. Please try again.");
-    }
+  const handleRemoveConnection = (connectionId) => {
+    setConnections(connections.filter(conn => conn.id !== connectionId));
   };
 
   // Render edit fields based on section
@@ -376,7 +310,6 @@ function ProfilePage() {
                 <div className="grid grid-cols-2 gap-4 border-b border-gray-100 pb-3">
                   <div className="text-right font-medium text-[#4F6F52]">Street Address:</div>
                   <div className="text-[#313131]">
-                    
                     <input
                       type="text"
                       value={editedData.streetAddress || ""}
@@ -491,7 +424,7 @@ function ProfilePage() {
     }
   };
 
-  // All view-only fields remain unchanged from your original code
+  // Render view-only fields
   const renderViewFields = () => {
     switch (activeSection) {
       case "general":
@@ -608,7 +541,6 @@ function ProfilePage() {
     }
   };
 
-  // Render JSX remains mostly unchanged except for connections section
   return (
     <div className="min-h-screen bg-white"> {/* 60% white */}
       {/* Using the updated Navbar component */}
