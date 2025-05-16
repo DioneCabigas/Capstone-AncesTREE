@@ -176,7 +176,7 @@ function SignupContent() {
   
             <button
               type="submit"
-              className="w-full bg-[#365643] hover:bg-green-700 text-white py-2 px-4 rounded-md mt-2"
+              className="w-full bg-[#365643] hover:bg-[#294032] text-white py-2 px-4 rounded-md mt-2"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Signing Up...' : 'SUBMIT'}

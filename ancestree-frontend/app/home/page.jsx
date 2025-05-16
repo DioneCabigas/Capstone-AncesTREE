@@ -70,7 +70,7 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#F4F4F4]">
       <Navbar />
       
       {/* Main content with 60-30-10 color distribution */}

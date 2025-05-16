@@ -7,13 +7,19 @@ export default function Home() {
       <Navbar />
 
       <div className="relative z-10 flex flex-col items-center justify-center text-[var(--light-yellow)] h-[calc(100vh-60px)] md:h-[calc(100vh-72px)] text-center">
-        <h1 className="text-5xl md:text-6xl font-bold text-light-yellow mb-10">
-          Welcome to
+        <h1 className="text-[64px] font-semibold">
+          Every Connection
         </h1>
-        <h2 className="text-7xl md:text-9xl font-bold text-light-yellow mb-30">
-          AncesTREE
+        <h1 className="text-[64px] font-semibold">
+           Brings You Closer
+        </h1>
+        <h2 className='text-[20px] mt-4'>
+          Discover relatives, uncover shared roots,
         </h2>
-        <Link href="/auth/signup" className="bg-[var(--light-yellow)] text-[var(--dark-green)] font-bold py-3 px-8 rounded-full text-xl">
+        <h2 className='text-[20px] mb-8'>
+          and strengthen family ties
+        </h2>
+        <Link href="/auth/signup" className="bg-[var(--white)] text-[var(--black)] font-medium py-3 px-8 rounded-full text-base hover:bg-[#D7D7D7] transition-colors">
           GET STARTED
         </Link>
       </div>
