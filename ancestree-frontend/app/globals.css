@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,700&display=swap');
 @import "tailwindcss";
 
 /* Updated color scheme using the 60-30-10 rule */
@@ -23,15 +24,27 @@
 
 /* Settings Fonts */
 * {
-  font-family: Poppins, Arial, Helvetica, sans-serif;
+  /* font-family: Poppins, Arial, Helvetica, sans-serif; */
+  font-family: 'Roboto Flex', sans-serif;
 }
 
 body {
-  background-image: url(/images/leavesBG.jpg);
+  background-image: url(/images/treeBG.jpg);
   background-position: center;
   background-size: cover;
   min-height: 100vh;
   color: var(--accent-color); /* Default text color */
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* dark overlay */
+  z-index: -1; /* behind content */
 }
 
 
