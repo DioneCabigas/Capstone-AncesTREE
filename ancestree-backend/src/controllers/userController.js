@@ -79,3 +79,41 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete user.' });
   }
 };
+
+exports.searchUsers = async (req, res) => {
+  const { term = '', city = '', country = '' } = req.query;
+
+  try {
+    const snapshot = await dbAdmin.collection('users').get();
+    const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    const searchTermLower = term.toLowerCase().trim();
+    const searchTokens = searchTermLower.split(' ').filter(t => t !== '');
+
+    // Filter users by matching ALL first or last name
+    let filteredResults = allUsers.filter(user => {
+      const firstNameLower = (user.firstName || '').toLowerCase();
+      const lastNameLower = (user.lastName || '').toLowerCase();
+
+      // Every search must appear (first / last name)
+      return searchTokens.every(token => firstNameLower.includes(token) || lastNameLower.includes(token));
+    });
+
+    // Filter by EXACT City
+    if (city.trim()) {
+      const cityLower = city.toLowerCase();
+      filteredResults = filteredResults.filter(user => (user.cityAddress || '').toLowerCase() === cityLower);
+    }
+
+    // Filter by EXACT Country
+    if (country.trim()) {
+      const countryLower = country.toLowerCase();
+      filteredResults = filteredResults.filter(user => (user.countryAddress || '').toLowerCase() === countryLower);
+    }
+
+    res.status(200).json(filteredResults);
+  } catch (error) {
+    console.error('Search failed:', error);
+    res.status(500).json({ message: 'Search failed' });
+  }
+};
