@@ -1,23 +1,17 @@
 'use client'
-
-/**
- * ProfilePage Component - Redesigned with 60-30-10 Color Rule
- * With Added Functionality for Viewing Other Users' Profiles
- * 
- * 60% - White (#FFFFFF) - Primary/dominant color
- * 30% - Light Green (#4F6F52) - Secondary color
- * 10% - Dark Gray (#313131) - Accent color
- */
-
 import { useState, useEffect } from "react";
-import { auth, db } from "@/app/utils/firebase";
+import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
 import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
 import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
+import axios from 'axios';
+
+axios.defaults.baseURL = 'http://localhost:3001';
+
+
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -59,7 +53,7 @@ function ProfilePage() {
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
 
-  // Fetch user data on mount
+// Fetch user data on mount
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -71,10 +65,11 @@ function ProfilePage() {
         setIsOwnProfile(isOwn);
         
         try {
-          // Load the target user's profile
-          const userDoc = await getDoc(doc(db, "users", targetUserId));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
+          // Load the target user's profile using the server API
+          const response = await axios.get(`/user/${targetUserId}`);
+          
+          if (response.status === 200) {
+            const data = response.data;
             setUserData(prevState => ({
               ...prevState,
               ...data,
@@ -88,36 +83,35 @@ function ProfilePage() {
                 ...data
               });
             }
-          } else if (!isOwn) {
-            // User not found and not own profile
-            setError("User profile not found");
-          }
-          
-          // If own profile, also fetch connections
-          if (isOwn) {
-            try {
-              // This is a placeholder - you'd need to implement your own 
-              // connection fetching logic based on your database structure
-              // Example: const connectionsSnapshot = await getDocs(...);
-              // setConnections(connectionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-              
-              // For now using dummy data
-              setConnections([
-                { id: "user2", name: "User 2" }
-              ]);
-            } catch (error) {
-              console.error("Error fetching connections:", error);
-            }
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
-          setError("Error loading profile data");
+          if (error.response && error.response.status === 404) {
+            setError("User profile not found");
+          } else {
+            setError("Error loading profile data");
+          }
+        }
+        
+        // If own profile, also fetch connections
+        if (isOwn) {
+          try {
+            // Fetch connections using the server API
+            const connectionsResponse = await axios.get(`/user/${currentUser.uid}/connections`);
+            
+            if (connectionsResponse.status === 200) {
+              setConnections(connectionsResponse.data);
+            }
+          } catch (error) {
+            console.error("Error fetching connections:", error);
+          }
         }
       }
     });
     
     return () => unsubscribe();
   }, [userIdFromQuery]);
+
 
   // Initialize edited data when entering edit mode
   useEffect(() => {
@@ -145,7 +139,7 @@ function ProfilePage() {
     }));
   };
 
-  // Handle save changes
+// Handle save changes - Updated to use server API
   const handleSaveChanges = async () => {
     setIsLoading(true);
     setError(null);
@@ -155,39 +149,75 @@ function ProfilePage() {
         throw new Error("User not authenticated");
       }
       
-      const userRef = doc(db, "users", currentUser.uid);
-      await updateDoc(userRef, editedData);
+      // Use the server API instead of direct Firebase access
+      const response = await axios.put(`/user/${currentUser.uid}`, editedData);
       
-      // Update local state
-      setUserData(editedData);
-      setEditMode(false);
-      
-      // Update firstName in localStorage to notify navbar
-      if (editedData.firstName) {
-        try {
-          localStorage.setItem('userFirstName', editedData.firstName || '');
-          // Try to dispatch event but handle any errors
+      if (response.status === 200) {
+        // Update local state
+        setUserData(editedData);
+        setEditMode(false);
+        
+        // Update firstName in localStorage to notify navbar
+        if (editedData.firstName) {
           try {
-            window.dispatchEvent(new Event('userDataChanged'));
-          } catch (eventError) {
-            console.error("Error dispatching event:", eventError);
+            localStorage.setItem('userFirstName', editedData.firstName || '');
+            // Try to dispatch event but handle any errors
+            try {
+              window.dispatchEvent(new Event('userDataChanged'));
+            } catch (eventError) {
+              console.error("Error dispatching event:", eventError);
+            }
+          } catch (storageError) {
+            console.error("Error updating localStorage:", storageError);
           }
-        } catch (storageError) {
-          console.error("Error updating localStorage:", storageError);
         }
       }
     } catch (error) {
       console.error("Error updating profile:", error);
-      setError("Failed to save changes. Please try again.");
+      setError(error.response?.data?.message || "Failed to save changes. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle removing a connection
-  const handleRemoveConnection = (connectionId) => {
-    setConnections(connections.filter(conn => conn.id !== connectionId));
+
+// Handle removing a connection - Updated to use server API
+  const handleRemoveConnection = async (connectionId) => {
+    try {
+      // Use the server API to remove connection
+      const response = await axios.delete(`/user/${currentUser.uid}/connections/${connectionId}`);
+      
+      if (response.status === 200) {
+        // Update local state after successful API call
+        setConnections(connections.filter(conn => conn.id !== connectionId));
+      }
+    } catch (error) {
+      console.error("Error removing connection:", error);
+      setError(error.response?.data?.message || "Failed to remove connection. Please try again.");
+    }
   };
+
+/*  // Handle adding a connection
+  const handleAddConnection = async (targetUserId) => {
+    try {
+      // Use the server API to add a connection
+      const response = await axios.post(`/api/users/${currentUser.uid}/connections`, {
+        targetUserId
+      });
+      
+      if (response.status === 201) {
+        // Refresh connections list
+        const connectionsResponse = await axios.get(`/api/users/${currentUser.uid}/connections`);
+        if (connectionsResponse.status === 200) {
+          setConnections(connectionsResponse.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error adding connection:", error);
+      setError(error.response?.data?.message || "Failed to add connection. Please try again.");
+    }
+  };
+*/   
 
   // Render edit fields based on section
   const renderEditFields = () => {
@@ -551,7 +581,7 @@ function ProfilePage() {
         {/* Profile Header Banner */}
         <div className="relative">
           {/* Banner Image - Secondary color (30%) */}
-          <div className="w-full h-48 bg-[#4F6F52] rounded-t-lg"></div>
+          <div className="w-full h-48 bg-[#365643] rounded-t-lg"></div>
           
           {/* Profile Image */}
           <div className="absolute left-8 bottom-0 transform translate-y-1/2">
@@ -579,7 +609,7 @@ function ProfilePage() {
           </div>
           
           {/* View Tree Button - Accent color (10%) */}
-          <button className="mt-4 md:mt-0 px-4 py-2 bg-[#313131] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center">
+          <button className="mt-4 md:mt-0 px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center">
             View Tree
           </button>
         </div>
@@ -656,7 +686,7 @@ function ProfilePage() {
             </div>
             
             {/* Main Content - White background (60%) */}
-            <div className="flex-1 bg-white border border-[#4F6F52] rounded-lg p-6">
+            <div className="flex-1 bg-white border border-[#ffffff] rounded-lg p-6">
               {/* Add edit/save/cancel buttons here - Only show for own profile */}
               {isOwnProfile && (
                 <div className="flex justify-end mb-6 space-x-3">
@@ -685,7 +715,7 @@ function ProfilePage() {
                   ) : (
                     <button 
                       onClick={handleEdit}
-                      className="px-4 py-2 bg-[#313131] text-white rounded-md hover:bg-opacity-90 flex items-center gap-2"
+                      className="px-4 py-2 bg-[#365643] text-white rounded-md hover:bg-opacity-90 flex items-center gap-2"
                     >
                       <Edit size={16} />
                       <span>Edit</span>
@@ -716,7 +746,7 @@ function ProfilePage() {
           </div>
         ) : (
           /* Connections Tab - Only for own profile */
-          <div className="bg-white border border-[#4F6F52] rounded-lg p-6">
+          <div className="bg-white border border-[#ffffff] rounded-lg p-6">
             <h2 className="text-xl font-semibold text-[#313131] mb-6">Connections</h2>
             
             {connections.length === 0 ? (
@@ -728,9 +758,9 @@ function ProfilePage() {
                     <div className="flex items-center">
                       {/* Connection Avatar */}
                       <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                        <span className="font-bold">{connection.name.charAt(0)}</span>
+                        <span className="font-bold">{connection.name ? connection.name.charAt(0) : ""}</span>
                       </div>
-                      <span className="text-[#313131] font-medium">{connection.name}</span>
+                      <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
                     </div>
                     
                     <div className="flex space-x-3">
@@ -756,13 +786,7 @@ function ProfilePage() {
                 ))}
               </div>
             )}
-            
-            {/* Add Connection Button */}
-            <div className="mt-6">
-              <button className="px-5 py-2 bg-[#313131] text-white rounded hover:bg-opacity-90 transition-colors">
-                Add Connection
-              </button>
-            </div>
+                        
           </div>
         )}
       </div>
