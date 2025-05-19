@@ -124,7 +124,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="relative top-0 left-0 right-0 bg-[#FFFFFF] text-sm text-[#313131] p-2 z-50 border-b-2 border-[#313131]">
+    <nav className="fixed top-0 left-0 right-0 bg-[#FFFFFF] text-sm text-[#313131] p-2 z-50 border-b-2 border-[#313131]">
       <div className="container mx-auto grid grid-cols-3 items-center">
         {/* Logo and Brand */}
         <div className="flex items-center space-x-2">
