@@ -577,7 +577,7 @@ function ProfilePage() {
       <Navbar />
       
       {/* Main Content - Add appropriate top padding to account for navbar */}
-      <div className="container mx-auto pt-16 px-4 pb-12">
+      <div className="container mx-auto pt-20 px-4 pb-12">
         {/* Profile Header Banner */}
         <div className="relative">
           {/* Banner Image - Secondary color (30%) */}

@@ -26,9 +26,9 @@ function LoginContent() {
         if (currentUser) {
           try {
             const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-            if (userDoc.exists()) {
-              setUserData(userDoc.data());
-            }
+            // if (userDoc.exists()) {
+            //   setUserData(userDoc.data());
+            // }
           } catch (error) {
             console.error("Error fetching user data:", error);
           }

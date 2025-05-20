@@ -100,18 +100,18 @@ function Settings() {
     return () => unsubscribe();
   }, []);
 
-  if (initialFetchLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
+  // if (initialFetchLoading) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center">
+  //       <LoadingSpinner />
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-5xl mx-auto py-20">
+      <div className="max-w-5xl mx-auto pt-20">
         <h1 className="text-3xl font-bold mb-6">Settings</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -200,7 +200,7 @@ function Settings() {
               {[
                 { label: "Allow other users to view my information", desc: "Decide if other AncesTREE members can see your basic profile details", value: allowView, setter: setAllowView },
                 { label: "Appear in public search results", desc: "Control whether your profile can be found by other users", value: appearInSearch, setter: setAppearInSearch },
-                { label: "Export my family tree data", desc: "Enable the option to download your family tree", value: exportTree, setter: setExportTree }
+                // { label: "Export my family tree data", desc: "Enable the option to download your family tree", value: exportTree, setter: setExportTree }
               ].map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between mb-4">
                   <div>
