@@ -15,8 +15,10 @@ function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(true);
+  const [connectionState, setConnectionState] = useState('none'); // 'none', 'pending', 'connected'
+  const [connectionId, setConnectionId] = useState(null); 
   
-  // Updated userData structure to match your Firebase structure
+  // Updated userData structure to match Firebase structure
   const [userData, setUserData] = useState({
     firstName: "",
     lastName: "",
@@ -56,21 +58,21 @@ function ProfilePage() {
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
 
-  // Fetch user data on mount
+  // Modify your existing useEffect that runs when userIdFromQuery changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setCurrentUser(currentUser);
-        
+
         // Determine which user profile to load
         const targetUserId = userIdFromQuery || currentUser.uid;
         const isOwn = targetUserId === currentUser.uid;
         setIsOwnProfile(isOwn);
-        
+
         try {
           // Load the target user's profile using the server API
           const response = await axios.get(`/user/${targetUserId}`);
-          
+
           if (response.status === 200) {
             const data = response.data;
             setUserData(prevState => ({
@@ -78,7 +80,7 @@ function ProfilePage() {
               ...data,
               userId: targetUserId
             }));
-            
+
             // If viewing another user's profile, store their info in profileUser
             if (!isOwn) {
               setProfileUser({
@@ -95,34 +97,54 @@ function ProfilePage() {
             setError("Error loading profile data");
           }
         }
-        
+
         // If own profile, also fetch connections and pending requests
         if (isOwn) {
           fetchConnectionsData(currentUser.uid);
         }
       }
     });
-    
+
     return () => unsubscribe();
   }, [userIdFromQuery]);
 
-  // Function to fetch both connections and pending requests
-  const fetchConnectionsData = async (userId) => {
+
+  useEffect(() => {
+    // Check connection status when viewing another user's profile
+    if (!isOwnProfile && currentUser && profileUser) {
+      checkConnectionStatus(currentUser.uid, profileUser.uid);
+    }
+  }, [currentUser, profileUser, isOwnProfile]);
+
+    const fetchUserDetails = async (uid) => {
+    try {
+      const response = await axios.get(`/user/${uid}`);
+      if (response.status === 200) {
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching user details for ${uid}:`, error);
+      return null;
+    }
+  };
+  
+    // Function to fetch both connections and pending requests
+    const fetchConnectionsData = async (userId) => {
     setConnectionLoading(true);
     try {
       // Try different possible API endpoints for connections
       let connectionsResponse;
       let pendingResponse;
       
-      // First attempt - standard endpoint
+      // First attempt - alternative endpoint format
       try {
-        connectionsResponse = await axios.get(`/user/${userId}/connections`);
+        connectionsResponse = await axios.get(`/connections/${userId}`);
       } catch (error) {
         if (error.response?.status === 404) {
-          // Try alternative endpoint format
+          // Try standard endpoint format
           try {
-            console.log("Trying alternative endpoint: /connections");
-            connectionsResponse = await axios.get(`/connections/${userId}`);
+            connectionsResponse = await axios.get(`/user/${userId}/connections`);
           } catch (altError) {
             console.error("Both connection endpoints failed:", altError);
             throw altError;
@@ -133,18 +155,36 @@ function ProfilePage() {
       }
       
       if (connectionsResponse.status === 200) {
-        setConnections(connectionsResponse.data);
+        // Filter for accepted connections only
+        const acceptedConnections = connectionsResponse.data.filter(
+          conn => conn.status === 'accepted'
+        );
+        
+        // For each connection, get the other user's details
+        const connectionsWithDetails = await Promise.all(
+          acceptedConnections.map(async (conn) => {
+            const otherUserId = conn.requester === userId ? conn.receiver : conn.requester;
+            const userDetails = await fetchUserDetails(otherUserId);
+            
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User"
+            };
+          })
+        );
+        
+        setConnections(connectionsWithDetails);
       }
       
       // Try to get pending requests - first attempt
       try {
-        pendingResponse = await axios.get(`/user/${userId}/pending`);
+        pendingResponse = await axios.get(`/connections/${userId}/pending`);
       } catch (error) {
         if (error.response?.status === 404) {
-          // Try alternative endpoint format
+          // Try standard endpoint format
           try {
-            console.log("Trying alternative endpoint: /connections/pending");
-            pendingResponse = await axios.get(`/connections/${userId}/pending`);
+            pendingResponse = await axios.get(`/user/${userId}/pending`);
           } catch (altError) {
             console.error("Both pending endpoints failed:", altError);
             throw altError;
@@ -155,7 +195,21 @@ function ProfilePage() {
       }
       
       if (pendingResponse.status === 200) {
-        setPendingConnections(pendingResponse.data);
+        // For each pending connection, get the other user's details
+        const pendingWithDetails = await Promise.all(
+          pendingResponse.data.map(async (conn) => {
+            const otherUserId = conn.requester === userId ? conn.receiver : conn.requester;
+            const userDetails = await fetchUserDetails(otherUserId);
+            
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User"
+            };
+          })
+        );
+        
+        setPendingConnections(pendingWithDetails);
       }
     } catch (error) {
       console.error("Error fetching connections data:", error);
@@ -201,7 +255,7 @@ function ProfilePage() {
         throw new Error("User not authenticated");
       }
       
-      // Use the server API instead of direct Firebase access
+      // Use the server API instead of direct Firebase 
       const response = await axios.put(`/user/${currentUser.uid}`, editedData);
       
       if (response.status === 200) {
@@ -237,6 +291,65 @@ function ProfilePage() {
       setIsLoading(false);
     }
   };
+
+  const checkConnectionStatus = async (currentUserId, profileUserId) => {
+  if (!currentUserId || !profileUserId) return;
+  
+  setConnectionLoading(true);
+  
+  try {
+    // Try fetching connections where either user is requester and other is receiver
+    let connectionsResponse;
+    try {
+      // First attempt - alternative endpoint format that seems to be working in your code
+      connectionsResponse = await axios.get(`/connections/${currentUserId}`);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // Try the other format
+        try {
+          connectionsResponse = await axios.get(`/user/${currentUserId}/connections`);
+        } catch (altError) {
+          console.error("Both connection endpoints failed:", altError);
+          throw altError;
+        }
+      } else {
+        throw error;
+      }
+    }
+    
+    // If we got connections, check if there's one between these users
+    if (connectionsResponse.status === 200) {
+      const allConnections = connectionsResponse.data;
+      
+      // Look for any connection between these users in either direction
+      const existingConnection = allConnections.find(conn => 
+        (conn.requester === currentUserId && conn.receiver === profileUserId) ||
+        (conn.requester === profileUserId && conn.receiver === currentUserId)
+      );
+      
+      if (existingConnection) {
+        setConnectionId(existingConnection.id);
+        
+        if (existingConnection.status === 'accepted') {
+          setConnectionState('connected');
+        } else if (existingConnection.status === 'pending') {
+          setConnectionState('pending');
+        } else {
+          setConnectionState('none');
+        }
+      } else {
+        setConnectionState('none');
+      }
+    }
+  } catch (error) {
+    console.error("Error checking connection status:", error);
+    // Don't show error message, just default to 'none'
+    setConnectionState('none');
+  } finally {
+    setConnectionLoading(false);
+  }
+};
+
 
   // Handle removing a connection - Updated to use server API
   const handleRemoveConnection = async (connectionId) => {
@@ -275,78 +388,53 @@ function ProfilePage() {
   
   // Handle sending a connection request - Direct Firebase approach
   const handleSendConnectionRequest = async () => {
-    if (!currentUser || !profileUser) return;
+  if (!currentUser || !profileUser) return;
+  
+  // Don't allow sending connection if already connected or pending
+  if (connectionState !== 'none') {
+    console.log(`Connection already ${connectionState}`);
+    return;
+  }
+  
+  setConnectionLoading(true);
+  setError(null);
+  
+  try {
+    // Use the backend API
+    const response = await axios.post('/connections', {
+      requester: currentUser.uid,
+      receiver: profileUser.uid
+    });
     
-    setConnectionLoading(true);
-    setError(null);
-    
-    try {
-      // Try the backend API first (as previously implemented)
-      try {
-        const response = await axios.post('/connections', {
-          requester: currentUser.uid,
-          receiver: profileUser.uid,
-          status: 'pending'
-        });
-        
-        if (response.status === 200 || response.status === 201) {
-          setSuccessMessage("Connection request sent successfully");
-          
-          // Clear success message after 3 seconds
-          setTimeout(() => {
-            setSuccessMessage(null);
-          }, 3000);
-          return; // Exit early if successful
-        }
-      } catch (apiError) {
-        console.error("API connection request failed:", apiError);
-        // Continue to Firebase fallback if API fails
+    if (response.status === 200 || response.status === 201) {
+      // Update local state to reflect the pending connection
+      setConnectionState('pending');
+      
+      // If there's an ID in the response, store it
+      if (response.data && response.data.id) {
+        setConnectionId(response.data.id);
       }
-      
-      // If the API call failed, show a message about using direct Firebase (for debugging)
-      console.log("Attempting direct Firebase connection creation");
-      
-      // Check if a connection already exists between these users
-      // You would need to import the necessary Firebase functions at the top:
-      // import { collection, addDoc, query, where, getDocs, getFirestore } from "firebase/firestore";
-      // const db = getFirestore();
-      
-      // This is pseudocode - you'll need to adapt this to your actual Firebase setup
-      /*
-      const db = getFirestore();
-      const connectionsRef = collection(db, "connections");
-      const q = query(
-        connectionsRef,
-        where("requester", "in", [currentUser.uid, profileUser.uid]),
-        where("receiver", "in", [currentUser.uid, profileUser.uid])
-      );
-      
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        setError("A connection already exists or is pending between you and this user");
-        return;
-      }
-      
-      // Create the connection document
-      await addDoc(collection(db, "connections"), {
-        requester: currentUser.uid,
-        receiver: profileUser.uid,
-        status: "pending",
-        createdAt: new Date()
-      });
       
       setSuccessMessage("Connection request sent successfully");
-      */
       
-      // For now, let's show a temporary message suggesting a workaround
-      setSuccessMessage("Connection request functionality is currently being set up. Please try again later.");
-    } catch (error) {
-      console.error("Error sending connection request:", error);
-      setError("Failed to send connection request. Please ensure the backend API is properly configured.");
-    } finally {
-      setConnectionLoading(false);
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
     }
-  };
+  } catch (error) {
+    console.error("Error sending connection request:", error);
+    
+    // Check if error is about duplicate connection
+    if (error.response?.data?.message?.includes('already exists')) {
+      setError("A connection request already exists between you and this user");
+    } else {
+      setError(error.response?.data?.message || "Failed to send connection request. Please try again.");
+    }
+  } finally {
+    setConnectionLoading(false);
+  }
+};
   
   // Handle updating a connection request status (confirm/deny)
   const handleUpdateConnectionStatus = async (connectionId, status) => {
@@ -839,57 +927,65 @@ function ProfilePage() {
         
         {/* Pending connection requests list */}
         {!connectionLoading && connectionsSubTab === "pending" && (
-          <>
-            <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
-            
-            {pendingConnections.length === 0 ? (
-              <p className="text-gray-500 italic py-4">No pending connection requests.</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {pendingConnections.map((request) => (
-                  <div key={request.id} className="flex items-center justify-between py-4">
-                    <div className="flex items-center">
-                      {/* Connection Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                        <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
-                      </div>
-                      <div>
-                        <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
-                        <div className="text-sm text-gray-500">
-                          {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
-                        </div>
-                      </div>
+        <>
+          <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
+              
+          {pendingConnections.length === 0 ? (
+            <p className="text-gray-500 italic py-4">No pending connection requests.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {pendingConnections.map((request) => (
+                <div key={request.id} className="flex items-center justify-between py-4">
+                  <div className="flex items-center">
+                    {/* Connection Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                      <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
                     </div>
-                    
-                    <div className="flex space-x-3">
-                      {/* Only show confirm/deny buttons for received requests */}
-                      {request.requester !== currentUser.uid ? (
-                        <>
-                          <button 
-                            onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
-                            className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
-                          >
-                            <Check size={16} />
-                            <span>Confirm</span>
-                          </button>
-                          <button 
-                            onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
-                            className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
-                          >
-                            <XMark size={16} />
-                            <span>Deny</span>
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-gray-500 italic">Awaiting response</span>
-                      )}
+                    <div>
+                      <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
+                      <div className="text-sm text-gray-500">
+                        {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+                  
+                  <div className="flex space-x-3">
+                    {/* Only show confirm/deny buttons for received requests */}
+                    {request.requester !== currentUser.uid ? (
+                      <>
+                        <button 
+                          onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
+                          className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
+                        >
+                          <Check size={16} />
+                          <span>Confirm</span>
+                        </button>
+                        <button 
+                          onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
+                          className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
+                        >
+                          <XMark size={16} />
+                          <span>Deny</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="flex space-x-2">
+                        <span className="text-gray-500 italic">Awaiting response</span>
+                        <button 
+                          onClick={() => router.push(`/auth/profile?userId=${request.otherUserId}`)}
+                          className="px-3 py-1 bg-[#4F6F52] text-white text-xs rounded hover:bg-opacity-90"
+                        >
+                          View Profile
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
       </div>
     );
   };
@@ -933,18 +1029,29 @@ function ProfilePage() {
             {!isOwnProfile && (
               <button 
                 onClick={handleSendConnectionRequest}
-                disabled={connectionLoading}
+                disabled={connectionLoading || connectionState !== 'none'}
                 className={`px-4 py-2 rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center ${
                   connectionLoading 
                     ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
-                    : "bg-[#4F6F52] text-white"
+                    : connectionState === 'connected'
+                      ? "bg-[#365643] text-white cursor-default"
+                      : connectionState === 'pending'
+                        ? "bg-gray-400 text-white cursor-default"
+                        : "bg-[#4F6F52] text-white"
                 }`}
               >
                 <Heart size={16} className="mr-2" />
-                {connectionLoading ? "Processing..." : "Connect"}
+                {connectionLoading 
+                  ? "Processing..." 
+                  : connectionState === 'connected'
+                    ? "Connected"
+                    : connectionState === 'pending'
+                      ? "Request Sent"
+                      : "Connect"
+                }
               </button>
-            )}
-            
+)}
+
             {/* View Tree Button */}
             <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
               View Tree
