@@ -6,12 +6,10 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
-import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
+import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
 import axios from 'axios';
 
 axios.defaults.baseURL = 'http://localhost:3001';
-
-
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -43,17 +41,22 @@ function ProfilePage() {
   const [editedData, setEditedData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   
   const [activeTab, setActiveTab] = useState("details");
   const [activeSection, setActiveSection] = useState("general");
+  const [connectionsSubTab, setConnectionsSubTab] = useState("active"); // "active" or "pending"
   const [connections, setConnections] = useState([]);
+  const [pendingConnections, setPendingConnections] = useState([]);
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  
   const router = useRouter();
   const searchParams = useSearchParams();
   
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
 
-// Fetch user data on mount
+  // Fetch user data on mount
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -93,18 +96,9 @@ function ProfilePage() {
           }
         }
         
-        // If own profile, also fetch connections
+        // If own profile, also fetch connections and pending requests
         if (isOwn) {
-          try {
-            // Fetch connections using the server API
-            const connectionsResponse = await axios.get(`/user/${currentUser.uid}/connections`);
-            
-            if (connectionsResponse.status === 200) {
-              setConnections(connectionsResponse.data);
-            }
-          } catch (error) {
-            console.error("Error fetching connections:", error);
-          }
+          fetchConnectionsData(currentUser.uid);
         }
       }
     });
@@ -112,6 +106,28 @@ function ProfilePage() {
     return () => unsubscribe();
   }, [userIdFromQuery]);
 
+  // Function to fetch both connections and pending requests
+  const fetchConnectionsData = async (userId) => {
+    setConnectionLoading(true);
+    try {
+      // Fetch accepted connections
+      const connectionsResponse = await axios.get(`/user/${userId}/connections`);
+      if (connectionsResponse.status === 200) {
+        setConnections(connectionsResponse.data);
+      }
+      
+      // Fetch pending connection requests
+      const pendingResponse = await axios.get(`/user/${userId}/pending`);
+      if (pendingResponse.status === 200) {
+        setPendingConnections(pendingResponse.data);
+      }
+    } catch (error) {
+      console.error("Error fetching connections data:", error);
+      setError("Failed to load connections");
+    } finally {
+      setConnectionLoading(false);
+    }
+  };
 
   // Initialize edited data when entering edit mode
   useEffect(() => {
@@ -139,7 +155,7 @@ function ProfilePage() {
     }));
   };
 
-// Handle save changes - Updated to use server API
+  // Handle save changes - Updated to use server API
   const handleSaveChanges = async () => {
     setIsLoading(true);
     setError(null);
@@ -156,6 +172,7 @@ function ProfilePage() {
         // Update local state
         setUserData(editedData);
         setEditMode(false);
+        setSuccessMessage("Profile updated successfully");
         
         // Update firstName in localStorage to notify navbar
         if (editedData.firstName) {
@@ -171,6 +188,11 @@ function ProfilePage() {
             console.error("Error updating localStorage:", storageError);
           }
         }
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -180,44 +202,81 @@ function ProfilePage() {
     }
   };
 
-
-// Handle removing a connection - Updated to use server API
+  // Handle removing a connection - Updated to use server API
   const handleRemoveConnection = async (connectionId) => {
     try {
       // Use the server API to remove connection
-      const response = await axios.delete(`/user/${currentUser.uid}/connections/${connectionId}`);
+      const response = await axios.delete(`/connection/${connectionId}`);
       
       if (response.status === 200) {
         // Update local state after successful API call
         setConnections(connections.filter(conn => conn.id !== connectionId));
+        setSuccessMessage("Connection removed successfully");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
       console.error("Error removing connection:", error);
       setError(error.response?.data?.message || "Failed to remove connection. Please try again.");
     }
   };
-
-/*  // Handle adding a connection
-  const handleAddConnection = async (targetUserId) => {
+  
+  // Handle sending a connection request
+  const handleSendConnectionRequest = async () => {
+    if (!currentUser || !profileUser) return;
+    
+    setConnectionLoading(true);
     try {
-      // Use the server API to add a connection
-      const response = await axios.post(`/api/users/${currentUser.uid}/connections`, {
-        targetUserId
+      const response = await axios.post('/connection', {
+        requester: currentUser.uid,
+        receiver: profileUser.uid
       });
       
-      if (response.status === 201) {
-        // Refresh connections list
-        const connectionsResponse = await axios.get(`/api/users/${currentUser.uid}/connections`);
-        if (connectionsResponse.status === 200) {
-          setConnections(connectionsResponse.data);
-        }
+      if (response.status === 200) {
+        setSuccessMessage("Connection request sent successfully");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
-      console.error("Error adding connection:", error);
-      setError(error.response?.data?.message || "Failed to add connection. Please try again.");
+      console.error("Error sending connection request:", error);
+      setError(error.response?.data?.message || "Failed to send connection request. Please try again.");
+    } finally {
+      setConnectionLoading(false);
     }
   };
-*/   
+  
+  // Handle updating a connection request status (confirm/deny)
+  const handleUpdateConnectionStatus = async (connectionId, status) => {
+    setConnectionLoading(true);
+    try {
+      const response = await axios.put(`/connection/${connectionId}`, { status });
+      
+      if (response.status === 200) {
+        // Refresh connections data
+        fetchConnectionsData(currentUser.uid);
+        
+        setSuccessMessage(status === 'accepted' 
+          ? "Connection request accepted" 
+          : "Connection request denied");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
+      }
+    } catch (error) {
+      console.error("Error updating connection status:", error);
+      setError(error.response?.data?.message || "Failed to update connection status. Please try again.");
+    } finally {
+      setConnectionLoading(false);
+    }
+  };
 
   // Render edit fields based on section
   const renderEditFields = () => {
@@ -571,6 +630,159 @@ function ProfilePage() {
     }
   };
 
+  // Render connections content
+  const renderConnectionsContent = () => {
+    return (
+      <div className="bg-white border border-[#ffffff] rounded-lg p-6">
+        {/* Sub-tabs for connections */}
+        <div className="border-b border-gray-200 mb-6">
+          <div className="flex space-x-4">
+            <button
+              className={`py-2 px-4 font-medium border-b-2 ${
+                connectionsSubTab === "active"
+                  ? "text-[#313131] border-[#313131]"
+                  : "text-[#4F6F52] border-transparent hover:text-[#313131]"
+              }`}
+              onClick={() => setConnectionsSubTab("active")}
+            >
+              Connections
+            </button>
+            <button
+              className={`py-2 px-4 font-medium border-b-2 ${
+                connectionsSubTab === "pending"
+                  ? "text-[#313131] border-[#313131]"
+                  : "text-[#4F6F52] border-transparent hover:text-[#313131]"
+              }`}
+              onClick={() => setConnectionsSubTab("pending")}
+            >
+              Pending Requests
+            </button>
+          </div>
+        </div>
+        
+        {/* Success message */}
+        {successMessage && (
+          <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-md">
+            {successMessage}
+          </div>
+        )}
+        
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-md">
+            {error}
+          </div>
+        )}
+        
+        {/* Loading indicator */}
+        {connectionLoading && (
+          <div className="flex justify-center py-6">
+            <p className="text-[#4F6F52]">Loading...</p>
+          </div>
+        )}
+        
+        {/* Active connections list */}
+        {!connectionLoading && connectionsSubTab === "active" && (
+          <>
+            <h2 className="text-xl font-semibold text-[#313131] mb-6">Your Connections</h2>
+            
+            {connections.length === 0 ? (
+              <p className="text-gray-500 italic py-4">No connections found.</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {connections.map((connection) => (
+                  <div key={connection.id} className="flex items-center justify-between py-4">
+                    <div className="flex items-center">
+                      {/* Connection Avatar */}
+                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                        <span className="font-bold">{connection.name ? connection.name.charAt(0) : ""}</span>
+                      </div>
+                      <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
+                    </div>
+                    
+                    <div className="flex space-x-3">
+                      <button 
+                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
+                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
+                      >
+                        View Profile
+                      </button>
+                      <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
+                        View Tree
+                      </button>
+                      {/* Trash icon button */}
+                      <button 
+                        onClick={() => handleRemoveConnection(connection.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                        title="Remove Connection"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Pending connection requests list */}
+        {!connectionLoading && connectionsSubTab === "pending" && (
+          <>
+            <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
+            
+            {pendingConnections.length === 0 ? (
+              <p className="text-gray-500 italic py-4">No pending connection requests.</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {pendingConnections.map((request) => (
+                  <div key={request.id} className="flex items-center justify-between py-4">
+                    <div className="flex items-center">
+                      {/* Connection Avatar */}
+                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                        <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
+                      </div>
+                      <div>
+                        <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
+                        <div className="text-sm text-gray-500">
+                          {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex space-x-3">
+                      {/* Only show confirm/deny buttons for received requests */}
+                      {request.requester !== currentUser.uid ? (
+                        <>
+                          <button 
+                            onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
+                            className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
+                          >
+                            <Check size={16} />
+                            <span>Confirm</span>
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
+                            className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
+                          >
+                            <XMark size={16} />
+                            <span>Deny</span>
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-gray-500 italic">Awaiting response</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-white"> {/* 60% white */}
       {/* Using the updated Navbar component */}
@@ -597,22 +809,44 @@ function ProfilePage() {
         {/* Profile Info Bar - White background (60%) */}
         <div className="bg-white shadow-md rounded-b-lg pt-20 pb-4 px-8 mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm text-gray-600 mb-1">ID: {userData.userId || "—"}</p>
             <h1 className="text-2xl font-bold text-[#313131]">
               {userData.firstName || "—"} {userData.lastName || "—"}
             </h1>
-            {!isOwnProfile && (
-              <p className="text-sm text-[#4F6F52] mt-1">
-                Viewing another user's profile
-              </p>
-            )}
+              <div className="text-sm text -[#4F6F52] mt-1">
+                <div className="text-[#313131]">{userData.email || "—"}</div>
+              </div>
           </div>
           
-          {/* View Tree Button - Accent color (10%) */}
-          <button className="mt-4 md:mt-0 px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center">
-            View Tree
-          </button>
+          <div className="mt-4 md:mt-0 flex flex-col sm:flex-row gap-2">
+            {/* Connect Button - Only show if viewing another user's profile */}
+            {!isOwnProfile && (
+              <button 
+                onClick={handleSendConnectionRequest}
+                disabled={connectionLoading}
+                className={`px-4 py-2 rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center ${
+                  connectionLoading 
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
+                    : "bg-[#4F6F52] text-white"
+                }`}
+              >
+                <Heart size={16} className="mr-2" />
+                {connectionLoading ? "Processing..." : "Connect"}
+              </button>
+            )}
+            
+            {/* View Tree Button */}
+            <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
+              View Tree
+            </button>
+          </div>
         </div>
+        
+        {/* Success message */}
+        {successMessage && (
+          <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-md">
+            {successMessage}
+          </div>
+        )}
         
         {/* Tab Navigation - Only show connections tab for own profile */}
         <div className="flex border-b border-gray-200 mb-6">
@@ -630,7 +864,13 @@ function ProfilePage() {
               className={`py-3 px-6 font-medium ${activeTab === "connections" 
                 ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
                 : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
-              onClick={() => setActiveTab("connections")}
+              onClick={() => {
+                setActiveTab("connections");
+                // Refresh connections data when clicking on the tab
+                if (currentUser) {
+                  fetchConnectionsData(currentUser.uid);
+                }
+              }}
             >
               Connections
             </button>
@@ -728,7 +968,7 @@ function ProfilePage() {
               {!isOwnProfile && (
                 <div className="mb-6 p-4 bg-[rgba(79,111,82,0.1)] rounded-md">
                   <p className="text-[#313131]">
-                    You are viewing {userData.firstName}'s profile. This is a read-only view.
+                    You are viewing {userData.firstName}'s profile.
                   </p>
                 </div>
               )}
@@ -745,49 +985,8 @@ function ProfilePage() {
             </div>
           </div>
         ) : (
-          /* Connections Tab - Only for own profile */
-          <div className="bg-white border border-[#ffffff] rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-[#313131] mb-6">Connections</h2>
-            
-            {connections.length === 0 ? (
-              <p className="text-gray-500 italic py-4">No connections found.</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {connections.map((connection) => (
-                  <div key={connection.id} className="flex items-center justify-between py-4">
-                    <div className="flex items-center">
-                      {/* Connection Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                        <span className="font-bold">{connection.name ? connection.name.charAt(0) : ""}</span>
-                      </div>
-                      <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
-                    </div>
-                    
-                    <div className="flex space-x-3">
-                      <button 
-                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
-                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
-                      >
-                        View Profile
-                      </button>
-                      <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
-                        View Tree
-                      </button>
-                      {/* Added trash icon button */}
-                      <button 
-                        onClick={() => handleRemoveConnection(connection.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        title="Remove Connection"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-                        
-          </div>
+          /* Connections Tab */
+          renderConnectionsContent()
         )}
       </div>
     </div>
