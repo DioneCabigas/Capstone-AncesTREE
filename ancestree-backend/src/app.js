@@ -17,7 +17,7 @@ app.use('/auth', authRoutes);
 app.use('/user', userRoutes);
 app.use('/connections', connectionRoutes);
 
-// For testing purposes (Ignore lng ni ninyo uwu)
+// For testing purposes (Ignore lng ni ninyo)
 const testRoutes = require('../tests/routes/testRoutes');
 app.use("/test", testRoutes);
 // ----------------------------------------------------------
