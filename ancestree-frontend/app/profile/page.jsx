@@ -16,7 +16,7 @@ function ProfilePage() {
   const [profileUser, setProfileUser] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(true);
   const [connectionState, setConnectionState] = useState('none'); // 'none', 'pending', 'connected'
-  const [connectionId, setConnectionId] = useState(null); 
+  const [connectionId, setConnectionId] = useState(null);
   
   // Updated userData structure to match Firebase structure
   const [userData, setUserData] = useState({
@@ -128,15 +128,23 @@ function ProfilePage() {
       return null;
     }
   };
+
+  const getInitials = (fullName) => {
+    if (!fullName) return "?";
+    const parts = fullName.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0);
+    return `${parts[0].charAt(0)}${parts[parts.length-1].charAt(0)}`;
+  };
   
     // Function to fetch both connections and pending requests
     const fetchConnectionsData = async (userId) => {
+
     setConnectionLoading(true);
     try {
       // Try different possible API endpoints for connections
       let connectionsResponse;
       let pendingResponse;
-      
+
       // First attempt - alternative endpoint format
       try {
         connectionsResponse = await axios.get(`/connections/${userId}`);
@@ -153,19 +161,18 @@ function ProfilePage() {
           throw error;
         }
       }
-      
+
       if (connectionsResponse.status === 200) {
-        // Filter for accepted connections only
-        const acceptedConnections = connectionsResponse.data.filter(
-          conn => conn.status === 'accepted'
-        );
-        
+
         // For each connection, get the other user's details
         const connectionsWithDetails = await Promise.all(
-          acceptedConnections.map(async (conn) => {
-            const otherUserId = conn.requester === userId ? conn.receiver : conn.requester;
+          connectionsResponse.data.map(async (conn) => {
+            // Use the connectionWith field if available, otherwise determine it
+            const otherUserId = conn.connectionWith || 
+              (conn.requester === userId ? conn.receiver : conn.requester);
+
             const userDetails = await fetchUserDetails(otherUserId);
-            
+
             return {
               ...conn,
               otherUserId,
@@ -173,10 +180,10 @@ function ProfilePage() {
             };
           })
         );
-        
+
         setConnections(connectionsWithDetails);
       }
-      
+
       // Try to get pending requests - first attempt
       try {
         pendingResponse = await axios.get(`/connections/${userId}/pending`);
@@ -193,14 +200,14 @@ function ProfilePage() {
           throw error;
         }
       }
-      
+
       if (pendingResponse.status === 200) {
         // For each pending connection, get the other user's details
         const pendingWithDetails = await Promise.all(
           pendingResponse.data.map(async (conn) => {
             const otherUserId = conn.requester === userId ? conn.receiver : conn.requester;
             const userDetails = await fetchUserDetails(otherUserId);
-            
+
             return {
               ...conn,
               otherUserId,
@@ -208,7 +215,7 @@ function ProfilePage() {
             };
           })
         );
-        
+
         setPendingConnections(pendingWithDetails);
       }
     } catch (error) {
@@ -225,6 +232,33 @@ function ProfilePage() {
       setEditedData({...userData});
     }
   }, [editMode, userData]);
+
+  useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (currentUser) {
+      setCurrentUser(currentUser);
+      
+      // Determine which user profile to load
+      const targetUserId = userIdFromQuery || currentUser.uid;
+      const isOwn = targetUserId === currentUser.uid;
+      setIsOwnProfile(isOwn);
+      
+      // Always default to details tab when viewing other profiles
+      // Only respect the tab parameter for your own profile
+      if (!isOwn) {
+        setActiveTab("details");
+      } else {
+        // Get the tab parameter from URL
+        const tabParam = searchParams.get('tab');
+        if (tabParam && ['details', 'connections'].includes(tabParam)) {
+          setActiveTab(tabParam);
+        }
+      }
+    }
+  });
+  
+  return () => unsubscribe();
+}, [userIdFromQuery, searchParams]);
 
   // Handle editing profile information
   const handleEdit = () => {
@@ -338,7 +372,37 @@ function ProfilePage() {
           setConnectionState('none');
         }
       } else {
-        setConnectionState('none');
+        // If no connection found, check pending requests specifically
+        let pendingResponse;
+        try {
+          pendingResponse = await axios.get(`/connections/${currentUserId}/pending`);
+        } catch (error) {
+          if (error.response?.status === 404) {
+            try {
+              pendingResponse = await axios.get(`/user/${currentUserId}/pending`);
+            } catch (altError) {
+              console.error("Both pending endpoints failed:", altError);
+              // Just continue without throwing - we'll check the profileUserId's connections below
+            }
+          }
+        }
+        
+        if (pendingResponse && pendingResponse.status === 200) {
+          const pendingRequests = pendingResponse.data;
+          const pendingConnection = pendingRequests.find(conn => 
+            (conn.requester === currentUserId && conn.receiver === profileUserId) ||
+            (conn.requester === profileUserId && conn.receiver === currentUserId)
+          );
+          
+          if (pendingConnection) {
+            setConnectionId(pendingConnection.id);
+            setConnectionState('pending');
+          } else {
+            setConnectionState('none');
+          }
+        } else {
+          setConnectionState('none');
+        }
       }
     }
   } catch (error) {
@@ -349,6 +413,7 @@ function ProfilePage() {
     setConnectionLoading(false);
   }
 };
+
 
 
   // Handle removing a connection - Updated to use server API
@@ -388,53 +453,54 @@ function ProfilePage() {
   
   // Handle sending a connection request - Direct Firebase approach
   const handleSendConnectionRequest = async () => {
-  if (!currentUser || !profileUser) return;
-  
-  // Don't allow sending connection if already connected or pending
-  if (connectionState !== 'none') {
-    console.log(`Connection already ${connectionState}`);
-    return;
-  }
-  
-  setConnectionLoading(true);
-  setError(null);
-  
-  try {
-    // Use the backend API
-    const response = await axios.post('/connections', {
-      requester: currentUser.uid,
-      receiver: profileUser.uid
-    });
+    if (!currentUser || !profileUser) return;
     
-    if (response.status === 200 || response.status === 201) {
-      // Update local state to reflect the pending connection
-      setConnectionState('pending');
+    // Don't allow sending connection if already connected or pending
+    if (connectionState !== 'none') {
+      console.log(`Connection already ${connectionState}`);
+      return;
+    }
+    
+    setConnectionLoading(true);
+    setError(null);
+    
+    try {
+      // Use the backend API
+      const response = await axios.post('/connections', {
+        requester: currentUser.uid,
+        receiver: profileUser.uid
+      });
       
-      // If there's an ID in the response, store it
-      if (response.data && response.data.id) {
-        setConnectionId(response.data.id);
+      if (response.status === 200 || response.status === 201) {
+        // Update local state to reflect the pending connection
+        setConnectionState('pending');
+        
+        // If there's an ID in the response, store it
+        if (response.data && response.data.id) {
+          setConnectionId(response.data.id);
+        }
+        
+        setSuccessMessage("Connection request sent successfully");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
+    } catch (error) {
+      console.error("Error sending connection request:", error);
       
-      setSuccessMessage("Connection request sent successfully");
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
+      // Check if error is about duplicate connection
+      if (error.response?.data?.message?.includes('already exists')) {
+        setError("A connection request already exists between you and this user");
+      } else {
+        setError(error.response?.data?.message || "Failed to send connection request. Please try again.");
+      }
+    } finally {
+      setConnectionLoading(false);
     }
-  } catch (error) {
-    console.error("Error sending connection request:", error);
-    
-    // Check if error is about duplicate connection
-    if (error.response?.data?.message?.includes('already exists')) {
-      setError("A connection request already exists between you and this user");
-    } else {
-      setError(error.response?.data?.message || "Failed to send connection request. Please try again.");
-    }
-  } finally {
-    setConnectionLoading(false);
-  }
-};
+  };
+
   
   // Handle updating a connection request status (confirm/deny)
   const handleUpdateConnectionStatus = async (connectionId, status) => {
@@ -858,21 +924,7 @@ function ProfilePage() {
             </button>
           </div>
         </div>
-        
-        {/* Success message */}
-        {successMessage && (
-          <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-md">
-            {successMessage}
-          </div>
-        )}
-        
-        {/* Error message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-md">
-            {error}
-          </div>
-        )}
-        
+
         {/* Loading indicator */}
         {connectionLoading && (
           <div className="flex justify-center py-6">
@@ -884,7 +936,7 @@ function ProfilePage() {
         {!connectionLoading && connectionsSubTab === "active" && (
           <>
             <h2 className="text-xl font-semibold text-[#313131] mb-6">Your Connections</h2>
-            
+
             {connections.length === 0 ? (
               <p className="text-gray-500 italic py-4">No connections found.</p>
             ) : (
@@ -894,20 +946,19 @@ function ProfilePage() {
                     <div className="flex items-center">
                       {/* Connection Avatar */}
                       <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                        <span className="font-bold">{connection.name ? connection.name.charAt(0) : ""}</span>
+                        <span className="font-bold">
+                          {connection.name ? connection.name.split(' ')[0].charAt(0) : ""}
+                        </span>
                       </div>
                       <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
                     </div>
-                    
+
                     <div className="flex space-x-3">
                       <button 
-                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
+                        onClick={() => router.push(`/profile?userId=${connection.otherUserId}&tab=details`)}
                         className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
                       >
                         View Profile
-                      </button>
-                      <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
-                        View Tree
                       </button>
                       {/* Trash icon button */}
                       <button 
@@ -928,64 +979,58 @@ function ProfilePage() {
         {/* Pending connection requests list */}
         {!connectionLoading && connectionsSubTab === "pending" && (
         <>
-          <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
-              
-          {pendingConnections.length === 0 ? (
-            <p className="text-gray-500 italic py-4">No pending connection requests.</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {pendingConnections.map((request) => (
-                <div key={request.id} className="flex items-center justify-between py-4">
-                  <div className="flex items-center">
-                    {/* Connection Avatar */}
-                    <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                      <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
-                    </div>
-                    <div>
-                      <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
-                      <div className="text-sm text-gray-500">
-                        {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
-                      </div>
-                    </div>
+        <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
+    
+        {pendingConnections.length === 0 ? (
+          <p className="text-gray-500 italic py-4">No pending connection requests.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {pendingConnections.map((request) => (
+              <div key={request.id} className="flex items-center justify-between py-4">
+                <div className="flex items-center">
+                  {/* Connection Avatar */}
+                  <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                    <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
                   </div>
-                  
-                  <div className="flex space-x-3">
-                    {/* Only show confirm/deny buttons for received requests */}
-                    {request.requester !== currentUser.uid ? (
-                      <>
-                        <button 
-                          onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
-                          className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
-                        >
-                          <Check size={16} />
-                          <span>Confirm</span>
-                        </button>
-                        <button 
-                          onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
-                          className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
-                        >
-                          <XMark size={16} />
-                          <span>Deny</span>
-                        </button>
-                      </>
-                    ) : (
-                      <div className="flex space-x-2">
-                        <span className="text-gray-500 italic">Awaiting response</span>
-                        <button 
-                          onClick={() => router.push(`/auth/profile?userId=${request.otherUserId}`)}
-                          className="px-3 py-1 bg-[#4F6F52] text-white text-xs rounded hover:bg-opacity-90"
-                        >
-                          View Profile
-                        </button>
-                      </div>
-                    )}
+                  <div>
+                    <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
+                    <div className="text-sm text-gray-500">
+                      {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
+                    </div>
                   </div>
                 </div>
-              ))}
+            
+            <div className="flex space-x-3">
+              {/* Only show confirm/deny buttons for received requests */}
+              {request.requester !== currentUser.uid ? (
+                // Incoming requests - show Confirm/Deny buttons
+                <>
+                  <button 
+                    onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
+                    className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
+                  >
+                    <Check size={16} />
+                    <span>Confirm</span>
+                  </button>
+                  <button 
+                    onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
+                    className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
+                  >
+                    <XMark size={16} />
+                    <span>Deny</span>
+                  </button>
+                </>
+              ) : (
+                // Outgoing requests - just show status text
+                <span className="text-gray-500 italic">Awaiting response</span>
+              )}
             </div>
-          )}
-        </>
-      )}
+          </div>
+        ))}
+      </div>
+    )}
+  </>
+)}
       </div>
     );
   };
@@ -1050,7 +1095,7 @@ function ProfilePage() {
                       : "Connect"
                 }
               </button>
-)}
+            )}
 
             {/* View Tree Button */}
             <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
@@ -1070,18 +1115,18 @@ function ProfilePage() {
         <div className="flex border-b border-gray-200 mb-6">
           <button 
             className={`py-3 px-6 font-medium ${activeTab === "details" 
-              ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */ 
-              : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
+              ? "text-[#313131] border-b-2 border-[#313131]"
+              : "text-[#4F6F52] hover:text-[#313131]"}`}
             onClick={() => setActiveTab("details")}
           >
             Personal Details
           </button>
-          
+            
           {isOwnProfile && (
             <button 
               className={`py-3 px-6 font-medium ${activeTab === "connections" 
-                ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
-                : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
+                ? "text-[#313131] border-b-2 border-[#313131]"
+                : "text-[#4F6F52] hover:text-[#313131]"}`}
               onClick={() => {
                 setActiveTab("connections");
                 // Refresh connections data when clicking on the tab
