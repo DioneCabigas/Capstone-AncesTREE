@@ -11,11 +11,31 @@ exports.createConnection = async (requester, receiver) => {
 };
 
 exports.getUserConnections = async (uid) => {
-  const snapshot = await collection
+  const requesterSnapshot = await collection
     .where('requester', '==', uid)
+    .where('status', '==', 'accepted')
     .get();
 
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const receiverSnapshot = await collection
+    .where('receiver', '==', uid)
+    .where('status', '==', 'accepted')
+    .get();
+
+  const requesterConnections = requesterSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    connectionWith: doc.data().receiver,
+    role: 'requester',
+  }));
+
+  const receiverConnections = receiverSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    connectionWith: doc.data().requester,
+    role: 'receiver',
+  }));
+
+  return [...requesterConnections, ...receiverConnections];
 };
 
 exports.getPendingRequests = async (uid) => {

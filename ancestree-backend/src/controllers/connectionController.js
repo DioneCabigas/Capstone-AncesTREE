@@ -16,32 +16,16 @@ exports.sendConnectionRequest = async (req, res) => {
   }
 };
 
-exports.getUserConnections = async (uid) => {
-  const requesterSnapshot = await collection
-    .where('requester', '==', uid)
-    .where('status', '==', 'accepted')
-    .get();
-
-  const receiverSnapshot = await collection
-    .where('receiver', '==', uid)
-    .where('status', '==', 'accepted')
-    .get();
-
-  const requesterConnections = requesterSnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    connectionWith: doc.data().receiver,
-    role: 'requester',
-  }));
-
-  const receiverConnections = receiverSnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data(),
-    connectionWith: doc.data().requester,
-    role: 'receiver',
-  }));
-
-  return [...requesterConnections, ...receiverConnections];
+exports.getUserConnections = async (req, res) => {
+  const { uid } = req.params;
+ 
+  try {
+    const connections = await connectionService.getUserConnections(uid);
+    res.status(200).json(connections);
+  } catch (error) {
+    console.error('Error getting user connections:', error);
+    res.status(500).json({ message: 'Failed to retrieve connections.' });
+  }
 };
 
 exports.getPendingRequests = async (req, res) => {
