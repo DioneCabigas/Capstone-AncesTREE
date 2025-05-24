@@ -6,19 +6,19 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Navbar from '../../components/Navbar';
-import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2 } from 'lucide-react';
+import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
 import axios from 'axios';
 
 axios.defaults.baseURL = 'http://localhost:3001';
-
-
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(true);
+  const [connectionState, setConnectionState] = useState('none'); // 'none', 'pending', 'connected'
+  const [connectionId, setConnectionId] = useState(null);
   
-  // Updated userData structure to match your Firebase structure
+  // Updated userData structure to match Firebase structure
   const [userData, setUserData] = useState({
     firstName: "",
     lastName: "",
@@ -43,31 +43,36 @@ function ProfilePage() {
   const [editedData, setEditedData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   
   const [activeTab, setActiveTab] = useState("details");
   const [activeSection, setActiveSection] = useState("general");
+  const [connectionsSubTab, setConnectionsSubTab] = useState("active"); // "active" or "pending"
   const [connections, setConnections] = useState([]);
+  const [pendingConnections, setPendingConnections] = useState([]);
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  
   const router = useRouter();
   const searchParams = useSearchParams();
   
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
 
-// Fetch user data on mount
+  // Modify your existing useEffect that runs when userIdFromQuery changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setCurrentUser(currentUser);
-        
+
         // Determine which user profile to load
         const targetUserId = userIdFromQuery || currentUser.uid;
         const isOwn = targetUserId === currentUser.uid;
         setIsOwnProfile(isOwn);
-        
+
         try {
           // Load the target user's profile using the server API
           const response = await axios.get(`/user/${targetUserId}`);
-          
+
           if (response.status === 200) {
             const data = response.data;
             setUserData(prevState => ({
@@ -75,7 +80,7 @@ function ProfilePage() {
               ...data,
               userId: targetUserId
             }));
-            
+
             // If viewing another user's profile, store their info in profileUser
             if (!isOwn) {
               setProfileUser({
@@ -92,26 +97,134 @@ function ProfilePage() {
             setError("Error loading profile data");
           }
         }
-        
-        // If own profile, also fetch connections
+
+        // If own profile, also fetch connections and pending requests
         if (isOwn) {
-          try {
-            // Fetch connections using the server API
-            const connectionsResponse = await axios.get(`/user/${currentUser.uid}/connections`);
-            
-            if (connectionsResponse.status === 200) {
-              setConnections(connectionsResponse.data);
-            }
-          } catch (error) {
-            console.error("Error fetching connections:", error);
-          }
+          fetchConnectionsData(currentUser.uid);
         }
       }
     });
-    
+
     return () => unsubscribe();
   }, [userIdFromQuery]);
 
+
+  useEffect(() => {
+    // Check connection status when viewing another user's profile
+    if (!isOwnProfile && currentUser && profileUser) {
+      checkConnectionStatus(currentUser.uid, profileUser.uid);
+    }
+  }, [currentUser, profileUser, isOwnProfile]);
+
+    const fetchUserDetails = async (uid) => {
+    try {
+      const response = await axios.get(`/user/${uid}`);
+      if (response.status === 200) {
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching user details for ${uid}:`, error);
+      return null;
+    }
+  };
+
+  const getInitials = (fullName) => {
+    if (!fullName) return "?";
+    const parts = fullName.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0);
+    return `${parts[0].charAt(0)}${parts[parts.length-1].charAt(0)}`;
+  };
+  
+    // Function to fetch both connections and pending requests
+    const fetchConnectionsData = async (userId) => {
+
+    setConnectionLoading(true);
+    try {
+      // Try different possible API endpoints for connections
+      let connectionsResponse;
+      let pendingResponse;
+
+      // First attempt - alternative endpoint format
+      try {
+        connectionsResponse = await axios.get(`/connections/${userId}`);
+      } catch (error) {
+        if (error.response?.status === 404) {
+          // Try standard endpoint format
+          try {
+            connectionsResponse = await axios.get(`/user/${userId}/connections`);
+          } catch (altError) {
+            console.error("Both connection endpoints failed:", altError);
+            throw altError;
+          }
+        } else {
+          throw error;
+        }
+      }
+
+      if (connectionsResponse.status === 200) {
+
+        // For each connection, get the other user's details
+        const connectionsWithDetails = await Promise.all(
+          connectionsResponse.data.map(async (conn) => {
+            // Use the connectionWith field if available, otherwise determine it
+            const otherUserId = conn.connectionWith || 
+              (conn.requester === userId ? conn.receiver : conn.requester);
+
+            const userDetails = await fetchUserDetails(otherUserId);
+
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User"
+            };
+          })
+        );
+
+        setConnections(connectionsWithDetails);
+      }
+
+      // Try to get pending requests - first attempt
+      try {
+        pendingResponse = await axios.get(`/connections/${userId}/pending`);
+      } catch (error) {
+        if (error.response?.status === 404) {
+          // Try standard endpoint format
+          try {
+            pendingResponse = await axios.get(`/user/${userId}/pending`);
+          } catch (altError) {
+            console.error("Both pending endpoints failed:", altError);
+            throw altError;
+          }
+        } else {
+          throw error;
+        }
+      }
+
+      if (pendingResponse.status === 200) {
+        // For each pending connection, get the other user's details
+        const pendingWithDetails = await Promise.all(
+          pendingResponse.data.map(async (conn) => {
+            const otherUserId = conn.requester === userId ? conn.receiver : conn.requester;
+            const userDetails = await fetchUserDetails(otherUserId);
+
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User"
+            };
+          })
+        );
+
+        setPendingConnections(pendingWithDetails);
+      }
+    } catch (error) {
+      console.error("Error fetching connections data:", error);
+      setError("Failed to load connections. Please check console for details.");
+    } finally {
+      setConnectionLoading(false);
+    }
+  };
 
   // Initialize edited data when entering edit mode
   useEffect(() => {
@@ -119,6 +232,33 @@ function ProfilePage() {
       setEditedData({...userData});
     }
   }, [editMode, userData]);
+
+  useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    if (currentUser) {
+      setCurrentUser(currentUser);
+      
+      // Determine which user profile to load
+      const targetUserId = userIdFromQuery || currentUser.uid;
+      const isOwn = targetUserId === currentUser.uid;
+      setIsOwnProfile(isOwn);
+      
+      // Always default to details tab when viewing other profiles
+      // Only respect the tab parameter for your own profile
+      if (!isOwn) {
+        setActiveTab("details");
+      } else {
+        // Get the tab parameter from URL
+        const tabParam = searchParams.get('tab');
+        if (tabParam && ['details', 'connections'].includes(tabParam)) {
+          setActiveTab(tabParam);
+        }
+      }
+    }
+  });
+  
+  return () => unsubscribe();
+}, [userIdFromQuery, searchParams]);
 
   // Handle editing profile information
   const handleEdit = () => {
@@ -139,7 +279,7 @@ function ProfilePage() {
     }));
   };
 
-// Handle save changes - Updated to use server API
+  // Handle save changes - Updated to use server API
   const handleSaveChanges = async () => {
     setIsLoading(true);
     setError(null);
@@ -149,13 +289,14 @@ function ProfilePage() {
         throw new Error("User not authenticated");
       }
       
-      // Use the server API instead of direct Firebase access
+      // Use the server API instead of direct Firebase 
       const response = await axios.put(`/user/${currentUser.uid}`, editedData);
       
       if (response.status === 200) {
         // Update local state
         setUserData(editedData);
         setEditMode(false);
+        setSuccessMessage("Profile updated successfully");
         
         // Update firstName in localStorage to notify navbar
         if (editedData.firstName) {
@@ -171,6 +312,11 @@ function ProfilePage() {
             console.error("Error updating localStorage:", storageError);
           }
         }
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -180,44 +326,222 @@ function ProfilePage() {
     }
   };
 
-
-// Handle removing a connection - Updated to use server API
-  const handleRemoveConnection = async (connectionId) => {
+  const checkConnectionStatus = async (currentUserId, profileUserId) => {
+  if (!currentUserId || !profileUserId) return;
+  
+  setConnectionLoading(true);
+  
+  try {
+    // Try fetching connections where either user is requester and other is receiver
+    let connectionsResponse;
     try {
-      // Use the server API to remove connection
-      const response = await axios.delete(`/user/${currentUser.uid}/connections/${connectionId}`);
+      // First attempt - alternative endpoint format that seems to be working in your code
+      connectionsResponse = await axios.get(`/connections/${currentUserId}`);
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // Try the other format
+        try {
+          connectionsResponse = await axios.get(`/user/${currentUserId}/connections`);
+        } catch (altError) {
+          console.error("Both connection endpoints failed:", altError);
+          throw altError;
+        }
+      } else {
+        throw error;
+      }
+    }
+    
+    // If we got connections, check if there's one between these users
+    if (connectionsResponse.status === 200) {
+      const allConnections = connectionsResponse.data;
+      
+      // Look for any connection between these users in either direction
+      const existingConnection = allConnections.find(conn => 
+        (conn.requester === currentUserId && conn.receiver === profileUserId) ||
+        (conn.requester === profileUserId && conn.receiver === currentUserId)
+      );
+      
+      if (existingConnection) {
+        setConnectionId(existingConnection.id);
+        
+        if (existingConnection.status === 'accepted') {
+          setConnectionState('connected');
+        } else if (existingConnection.status === 'pending') {
+          setConnectionState('pending');
+        } else {
+          setConnectionState('none');
+        }
+      } else {
+        // If no connection found, check pending requests specifically
+        let pendingResponse;
+        try {
+          pendingResponse = await axios.get(`/connections/${currentUserId}/pending`);
+        } catch (error) {
+          if (error.response?.status === 404) {
+            try {
+              pendingResponse = await axios.get(`/user/${currentUserId}/pending`);
+            } catch (altError) {
+              console.error("Both pending endpoints failed:", altError);
+              // Just continue without throwing - we'll check the profileUserId's connections below
+            }
+          }
+        }
+        
+        if (pendingResponse && pendingResponse.status === 200) {
+          const pendingRequests = pendingResponse.data;
+          const pendingConnection = pendingRequests.find(conn => 
+            (conn.requester === currentUserId && conn.receiver === profileUserId) ||
+            (conn.requester === profileUserId && conn.receiver === currentUserId)
+          );
+          
+          if (pendingConnection) {
+            setConnectionId(pendingConnection.id);
+            setConnectionState('pending');
+          } else {
+            setConnectionState('none');
+          }
+        } else {
+          setConnectionState('none');
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error checking connection status:", error);
+    // Don't show error message, just default to 'none'
+    setConnectionState('none');
+  } finally {
+    setConnectionLoading(false);
+  }
+};
+
+
+
+  // Handle removing a connection - Updated to use server API
+  const handleRemoveConnection = async (connectionId) => {
+    setError(null);
+    
+    try {
+      // Try the primary endpoint
+      let response;
+      try {
+        response = await axios.delete(`/connection/${connectionId}`);
+      } catch (error) {
+        if (error.response?.status === 404) {
+          // Try alternative endpoint format
+          console.log("Trying alternative endpoint: /connections");
+          response = await axios.delete(`/connections/${connectionId}`);
+        } else {
+          throw error;
+        }
+      }
       
       if (response.status === 200) {
         // Update local state after successful API call
         setConnections(connections.filter(conn => conn.id !== connectionId));
+        setSuccessMessage("Connection removed successfully");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
       console.error("Error removing connection:", error);
       setError(error.response?.data?.message || "Failed to remove connection. Please try again.");
     }
   };
-
-/*  // Handle adding a connection
-  const handleAddConnection = async (targetUserId) => {
+  
+  // Handle sending a connection request - Direct Firebase approach
+  const handleSendConnectionRequest = async () => {
+    if (!currentUser || !profileUser) return;
+    
+    // Don't allow sending connection if already connected or pending
+    if (connectionState !== 'none') {
+      console.log(`Connection already ${connectionState}`);
+      return;
+    }
+    
+    setConnectionLoading(true);
+    setError(null);
+    
     try {
-      // Use the server API to add a connection
-      const response = await axios.post(`/api/users/${currentUser.uid}/connections`, {
-        targetUserId
+      // Use the backend API
+      const response = await axios.post('/connections', {
+        requester: currentUser.uid,
+        receiver: profileUser.uid
       });
       
-      if (response.status === 201) {
-        // Refresh connections list
-        const connectionsResponse = await axios.get(`/api/users/${currentUser.uid}/connections`);
-        if (connectionsResponse.status === 200) {
-          setConnections(connectionsResponse.data);
+      if (response.status === 200 || response.status === 201) {
+        // Update local state to reflect the pending connection
+        setConnectionState('pending');
+        
+        // If there's an ID in the response, store it
+        if (response.data && response.data.id) {
+          setConnectionId(response.data.id);
         }
+        
+        setSuccessMessage("Connection request sent successfully");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
       }
     } catch (error) {
-      console.error("Error adding connection:", error);
-      setError(error.response?.data?.message || "Failed to add connection. Please try again.");
+      console.error("Error sending connection request:", error);
+      
+      // Check if error is about duplicate connection
+      if (error.response?.data?.message?.includes('already exists')) {
+        setError("A connection request already exists between you and this user");
+      } else {
+        setError(error.response?.data?.message || "Failed to send connection request. Please try again.");
+      }
+    } finally {
+      setConnectionLoading(false);
     }
   };
-*/   
+
+  
+  // Handle updating a connection request status (confirm/deny)
+  const handleUpdateConnectionStatus = async (connectionId, status) => {
+    setConnectionLoading(true);
+    setError(null);
+    
+    try {
+      // Try the primary endpoint
+      let response;
+      try {
+        response = await axios.put(`/connection/${connectionId}`, { status });
+      } catch (error) {
+        if (error.response?.status === 404) {
+          // Try alternative endpoint format
+          console.log("Trying alternative endpoint: /connections");
+          response = await axios.put(`/connections/${connectionId}`, { status });
+        } else {
+          throw error;
+        }
+      }
+      
+      if (response.status === 200) {
+        // Refresh connections data
+        fetchConnectionsData(currentUser.uid);
+        
+        setSuccessMessage(status === 'accepted' 
+          ? "Connection request accepted" 
+          : "Connection request denied");
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSuccessMessage(null);
+        }, 3000);
+      }
+    } catch (error) {
+      console.error("Error updating connection status:", error);
+      setError(error.response?.data?.message || "Failed to update connection status. Please try again.");
+    } finally {
+      setConnectionLoading(false);
+    }
+  };
 
   // Render edit fields based on section
   const renderEditFields = () => {
@@ -571,13 +895,153 @@ function ProfilePage() {
     }
   };
 
+  // Render connections content
+  const renderConnectionsContent = () => {
+    return (
+      <div className="bg-white border border-[#ffffff] rounded-lg p-6">
+        {/* Sub-tabs for connections */}
+        <div className="border-b border-gray-200 mb-6">
+          <div className="flex space-x-4">
+            <button
+              className={`py-2 px-4 font-medium border-b-2 ${
+                connectionsSubTab === "active"
+                  ? "text-[#313131] border-[#313131]"
+                  : "text-[#4F6F52] border-transparent hover:text-[#313131]"
+              }`}
+              onClick={() => setConnectionsSubTab("active")}
+            >
+              Connections
+            </button>
+            <button
+              className={`py-2 px-4 font-medium border-b-2 ${
+                connectionsSubTab === "pending"
+                  ? "text-[#313131] border-[#313131]"
+                  : "text-[#4F6F52] border-transparent hover:text-[#313131]"
+              }`}
+              onClick={() => setConnectionsSubTab("pending")}
+            >
+              Pending Requests
+            </button>
+          </div>
+        </div>
+
+        {/* Loading indicator */}
+        {connectionLoading && (
+          <div className="flex justify-center py-6">
+            <p className="text-[#4F6F52]">Loading...</p>
+          </div>
+        )}
+        
+        {/* Active connections list */}
+        {!connectionLoading && connectionsSubTab === "active" && (
+          <>
+            <h2 className="text-xl font-semibold text-[#313131] mb-6">Your Connections</h2>
+
+            {connections.length === 0 ? (
+              <p className="text-gray-500 italic py-4">No connections found.</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {connections.map((connection) => (
+                  <div key={connection.id} className="flex items-center justify-between py-4">
+                    <div className="flex items-center">
+                      {/* Connection Avatar */}
+                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                        <span className="font-bold">
+                          {connection.name ? connection.name.split(' ')[0].charAt(0) : ""}
+                        </span>
+                      </div>
+                      <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
+                    </div>
+
+                    <div className="flex space-x-3">
+                      <button 
+                        onClick={() => router.push(`/profile?userId=${connection.otherUserId}&tab=details`)}
+                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
+                      >
+                        View Profile
+                      </button>
+                      {/* Trash icon button */}
+                      <button 
+                        onClick={() => handleRemoveConnection(connection.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                        title="Remove Connection"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Pending connection requests list */}
+        {!connectionLoading && connectionsSubTab === "pending" && (
+        <>
+        <h2 className="text-xl font-semibold text-[#313131] mb-6">Pending Connection Requests</h2>
+    
+        {pendingConnections.length === 0 ? (
+          <p className="text-gray-500 italic py-4">No pending connection requests.</p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {pendingConnections.map((request) => (
+              <div key={request.id} className="flex items-center justify-between py-4">
+                <div className="flex items-center">
+                  {/* Connection Avatar */}
+                  <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
+                    <span className="font-bold">{request.name ? request.name.charAt(0) : ""}</span>
+                  </div>
+                  <div>
+                    <div className="text-[#313131] font-medium">{request.name || "Unknown"}</div>
+                    <div className="text-sm text-gray-500">
+                      {request.requester === currentUser.uid ? "Sent by you" : "Wants to connect with you"}
+                    </div>
+                  </div>
+                </div>
+            
+            <div className="flex space-x-3">
+              {/* Only show confirm/deny buttons for received requests */}
+              {request.requester !== currentUser.uid ? (
+                // Incoming requests - show Confirm/Deny buttons
+                <>
+                  <button 
+                    onClick={() => handleUpdateConnectionStatus(request.id, 'accepted')}
+                    className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90 flex items-center gap-1"
+                  >
+                    <Check size={16} />
+                    <span>Confirm</span>
+                  </button>
+                  <button 
+                    onClick={() => handleUpdateConnectionStatus(request.id, 'rejected')}
+                    className="px-4 py-2 border border-gray-300 text-[#313131] text-sm rounded hover:bg-gray-50 flex items-center gap-1"
+                  >
+                    <XMark size={16} />
+                    <span>Deny</span>
+                  </button>
+                </>
+              ) : (
+                // Outgoing requests - just show status text
+                <span className="text-gray-500 italic">Awaiting response</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </>
+)}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-white"> {/* 60% white */}
       {/* Using the updated Navbar component */}
       <Navbar />
       
       {/* Main Content - Add appropriate top padding to account for navbar */}
-      <div className="container mx-auto pt-16 px-4 pb-12">
+      <div className="container mx-auto pt-20 px-4 pb-12">
         {/* Profile Header Banner */}
         <div className="relative">
           {/* Banner Image - Secondary color (30%) */}
@@ -597,40 +1061,79 @@ function ProfilePage() {
         {/* Profile Info Bar - White background (60%) */}
         <div className="bg-white shadow-md rounded-b-lg pt-20 pb-4 px-8 mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm text-gray-600 mb-1">ID: {userData.userId || "—"}</p>
             <h1 className="text-2xl font-bold text-[#313131]">
               {userData.firstName || "—"} {userData.lastName || "—"}
             </h1>
-            {!isOwnProfile && (
-              <p className="text-sm text-[#4F6F52] mt-1">
-                Viewing another user's profile
-              </p>
-            )}
+              <div className="text-sm text -[#4F6F52] mt-1">
+                <div className="text-[#313131]">{userData.email || "—"}</div>
+              </div>
           </div>
           
-          {/* View Tree Button - Accent color (10%) */}
-          <button className="mt-4 md:mt-0 px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center">
-            View Tree
-          </button>
+          <div className="mt-4 md:mt-0 flex flex-col sm:flex-row gap-2">
+            {/* Connect Button - Only show if viewing another user's profile */}
+            {!isOwnProfile && (
+              <button 
+                onClick={handleSendConnectionRequest}
+                disabled={connectionLoading || connectionState !== 'none'}
+                className={`px-4 py-2 rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center ${
+                  connectionLoading 
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
+                    : connectionState === 'connected'
+                      ? "bg-[#365643] text-white cursor-default"
+                      : connectionState === 'pending'
+                        ? "bg-gray-400 text-white cursor-default"
+                        : "bg-[#4F6F52] text-white"
+                }`}
+              >
+                <Heart size={16} className="mr-2" />
+                {connectionLoading 
+                  ? "Processing..." 
+                  : connectionState === 'connected'
+                    ? "Connected"
+                    : connectionState === 'pending'
+                      ? "Request Sent"
+                      : "Connect"
+                }
+              </button>
+            )}
+
+            {/* View Tree Button */}
+            <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
+              View Tree
+            </button>
+          </div>
         </div>
+        
+        {/* Success message */}
+        {successMessage && (
+          <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-md">
+            {successMessage}
+          </div>
+        )}
         
         {/* Tab Navigation - Only show connections tab for own profile */}
         <div className="flex border-b border-gray-200 mb-6">
           <button 
             className={`py-3 px-6 font-medium ${activeTab === "details" 
-              ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */ 
-              : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
+              ? "text-[#313131] border-b-2 border-[#313131]"
+              : "text-[#4F6F52] hover:text-[#313131]"}`}
             onClick={() => setActiveTab("details")}
           >
             Personal Details
           </button>
-          
+            
           {isOwnProfile && (
             <button 
               className={`py-3 px-6 font-medium ${activeTab === "connections" 
-                ? "text-[#313131] border-b-2 border-[#313131]" /* 10% accent color */
-                : "text-[#4F6F52] hover:text-[#313131]"}`} /* 30% color */
-              onClick={() => setActiveTab("connections")}
+                ? "text-[#313131] border-b-2 border-[#313131]"
+                : "text-[#4F6F52] hover:text-[#313131]"}`}
+              onClick={() => {
+                setActiveTab("connections");
+                // Refresh connections data when clicking on the tab
+                if (currentUser) {
+                  fetchConnectionsData(currentUser.uid);
+                }
+              }}
             >
               Connections
             </button>
@@ -728,7 +1231,7 @@ function ProfilePage() {
               {!isOwnProfile && (
                 <div className="mb-6 p-4 bg-[rgba(79,111,82,0.1)] rounded-md">
                   <p className="text-[#313131]">
-                    You are viewing {userData.firstName}'s profile. This is a read-only view.
+                    You are viewing {userData.firstName}'s profile.
                   </p>
                 </div>
               )}
@@ -745,49 +1248,8 @@ function ProfilePage() {
             </div>
           </div>
         ) : (
-          /* Connections Tab - Only for own profile */
-          <div className="bg-white border border-[#ffffff] rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-[#313131] mb-6">Connections</h2>
-            
-            {connections.length === 0 ? (
-              <p className="text-gray-500 italic py-4">No connections found.</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {connections.map((connection) => (
-                  <div key={connection.id} className="flex items-center justify-between py-4">
-                    <div className="flex items-center">
-                      {/* Connection Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-[rgba(79,111,82,0.1)] text-[#313131] flex items-center justify-center mr-4">
-                        <span className="font-bold">{connection.name ? connection.name.charAt(0) : ""}</span>
-                      </div>
-                      <span className="text-[#313131] font-medium">{connection.name || "Unknown"}</span>
-                    </div>
-                    
-                    <div className="flex space-x-3">
-                      <button 
-                        onClick={() => router.push(`/auth/profile?userId=${connection.id}`)}
-                        className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90"
-                      >
-                        View Profile
-                      </button>
-                      <button className="px-4 py-2 bg-[#4F6F52] text-white text-sm rounded hover:bg-opacity-90">
-                        View Tree
-                      </button>
-                      {/* Added trash icon button */}
-                      <button 
-                        onClick={() => handleRemoveConnection(connection.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        title="Remove Connection"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-                        
-          </div>
+          /* Connections Tab */
+          renderConnectionsContent()
         )}
       </div>
     </div>

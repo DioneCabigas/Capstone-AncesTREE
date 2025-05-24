@@ -4,6 +4,7 @@ const cors = require('cors');
 const session = require('express-session');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const connectionRoutes = require('./routes/connectionRoutes');
 const admin = require('./config/database');
 
 const app = express();
@@ -14,8 +15,9 @@ app.use(bodyParser.json());
 
 app.use('/auth', authRoutes);
 app.use('/user', userRoutes);
+app.use('/connections', connectionRoutes);
 
-// For testing purposes (Ignore lng ni ninyo uwu)
+// For testing purposes (Ignore lng ni ninyo)
 const testRoutes = require('../tests/routes/testRoutes');
 app.use("/test", testRoutes);
 // ----------------------------------------------------------

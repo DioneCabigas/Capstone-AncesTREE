@@ -74,7 +74,7 @@ function HomeContent() {
       <Navbar />
       
       {/* Main content with 60-30-10 color distribution */}
-      <div className="container mx-auto p-8">
+      <div className="container mx-auto p-8 py-20">
         {/* Hero section - using white as primary, green as secondary */}
         <div className="bg-white rounded-lg shadow-md p-8 mb-8">
           <h1 className="text-5xl font-bold text-[#313131] mb-4">Welcome to AncesTREE!</h1>
