@@ -71,7 +71,7 @@ function ProfilePage() {
 
         try {
           // Load the target user's profile using the server API
-          const response = await axios.get(`/user/${targetUserId}`);
+          const response = await axios.get(`/api/user/${targetUserId}`);
 
           if (response.status === 200) {
             const data = response.data;
@@ -118,7 +118,7 @@ function ProfilePage() {
 
     const fetchUserDetails = async (uid) => {
     try {
-      const response = await axios.get(`/user/${uid}`);
+      const response = await axios.get(`/api/user/${uid}`);
       if (response.status === 200) {
         return response.data;
       }
@@ -147,12 +147,12 @@ function ProfilePage() {
 
       // First attempt - alternative endpoint format
       try {
-        connectionsResponse = await axios.get(`/connections/${userId}`);
+        connectionsResponse = await axios.get(`/api/connections/${userId}`);
       } catch (error) {
         if (error.response?.status === 404) {
           // Try standard endpoint format
           try {
-            connectionsResponse = await axios.get(`/user/${userId}/connections`);
+            connectionsResponse = await axios.get(`/api/user/${userId}/connections`);
           } catch (altError) {
             console.error("Both connection endpoints failed:", altError);
             throw altError;
@@ -186,12 +186,12 @@ function ProfilePage() {
 
       // Try to get pending requests - first attempt
       try {
-        pendingResponse = await axios.get(`/connections/${userId}/pending`);
+        pendingResponse = await axios.get(`/api/connections/${userId}/pending`);
       } catch (error) {
         if (error.response?.status === 404) {
           // Try standard endpoint format
           try {
-            pendingResponse = await axios.get(`/user/${userId}/pending`);
+            pendingResponse = await axios.get(`/api/user/${userId}/pending`);
           } catch (altError) {
             console.error("Both pending endpoints failed:", altError);
             throw altError;
@@ -290,7 +290,7 @@ function ProfilePage() {
       }
       
       // Use the server API instead of direct Firebase 
-      const response = await axios.put(`/user/${currentUser.uid}`, editedData);
+      const response = await axios.put(`/api/user/${currentUser.uid}`, editedData);
       
       if (response.status === 200) {
         // Update local state
@@ -336,12 +336,12 @@ function ProfilePage() {
     let connectionsResponse;
     try {
       // First attempt - alternative endpoint format that seems to be working in your code
-      connectionsResponse = await axios.get(`/connections/${currentUserId}`);
+      connectionsResponse = await axios.get(`/api/connections/${currentUserId}`);
     } catch (error) {
       if (error.response?.status === 404) {
         // Try the other format
         try {
-          connectionsResponse = await axios.get(`/user/${currentUserId}/connections`);
+          connectionsResponse = await axios.get(`/api/user/${currentUserId}/connections`);
         } catch (altError) {
           console.error("Both connection endpoints failed:", altError);
           throw altError;
@@ -375,11 +375,11 @@ function ProfilePage() {
         // If no connection found, check pending requests specifically
         let pendingResponse;
         try {
-          pendingResponse = await axios.get(`/connections/${currentUserId}/pending`);
+          pendingResponse = await axios.get(`/api/connections/${currentUserId}/pending`);
         } catch (error) {
           if (error.response?.status === 404) {
             try {
-              pendingResponse = await axios.get(`/user/${currentUserId}/pending`);
+              pendingResponse = await axios.get(`/api/user/${currentUserId}/pending`);
             } catch (altError) {
               console.error("Both pending endpoints failed:", altError);
               // Just continue without throwing - we'll check the profileUserId's connections below
@@ -424,12 +424,12 @@ function ProfilePage() {
       // Try the primary endpoint
       let response;
       try {
-        response = await axios.delete(`/connection/${connectionId}`);
+        response = await axios.delete(`/api/connection/${connectionId}`);
       } catch (error) {
         if (error.response?.status === 404) {
           // Try alternative endpoint format
           console.log("Trying alternative endpoint: /connections");
-          response = await axios.delete(`/connections/${connectionId}`);
+          response = await axios.delete(`/api/connections/${connectionId}`);
         } else {
           throw error;
         }
@@ -466,7 +466,7 @@ function ProfilePage() {
     
     try {
       // Use the backend API
-      const response = await axios.post('/connections', {
+      const response = await axios.post('/api/connections', {
         requester: currentUser.uid,
         receiver: profileUser.uid
       });
@@ -511,12 +511,12 @@ function ProfilePage() {
       // Try the primary endpoint
       let response;
       try {
-        response = await axios.put(`/connection/${connectionId}`, { status });
+        response = await axios.put(`/api/connection/${connectionId}`, { status });
       } catch (error) {
         if (error.response?.status === 404) {
           // Try alternative endpoint format
           console.log("Trying alternative endpoint: /connections");
-          response = await axios.put(`/connections/${connectionId}`, { status });
+          response = await axios.put(`/api/connections/${connectionId}`, { status });
         } else {
           throw error;
         }
