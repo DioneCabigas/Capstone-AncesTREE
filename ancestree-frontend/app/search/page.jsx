@@ -2,6 +2,8 @@
 
 import Navbar from '../../components/Navbar';
 import { useState, useEffect } from 'react';
+import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { db } from '../utils/firebase';
 import { FaUserCircle } from 'react-icons/fa'; // Import a user icon
 
 function SearchUsers() {
@@ -9,38 +11,63 @@ function SearchUsers() {
   const [cityFilter, setCityFilter] = useState('');
   const [countryFilter, setCountryFilter] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSearch = async (term) => {
+    setLoading(true);
     setError('');
     setSearchResults([]);
 
     if (!term.trim()) {
+      setLoading(false);
       return;
     }
 
     try {
-      // Prepare query parameters
-      const params = new URLSearchParams({
-        term: term.trim(),
-        city: cityFilter.trim(),
-        country: countryFilter.trim(),
+      const usersRef = collection(db, 'users');
+      const searchTermLower = term.toLowerCase().trim();
+      const searchTokens = searchTermLower.split(' ').filter(token => token !== ''); // Split search term into words
+
+      const querySnapshot = await getDocs(usersRef);
+      const allUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const filteredResults = allUsers.filter(user => {
+        const firstNameLower = user.firstName.toLowerCase();
+        const lastNameLower = user.lastName.toLowerCase();
+
+        // Check if all search tokens are found in either the first or last name
+        return searchTokens.every(token => firstNameLower.includes(token) || lastNameLower.includes(token));
       });
 
-      // Call your backend search API
-      const response = await fetch(`http://localhost:3001/user/search?${params.toString()}`);
+      let results = filteredResults;
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch search results.');
+      // Manual filtering by City
+      if (cityFilter.trim()) {
+        const cityFilterLower = cityFilter.toLowerCase();
+        results = results.filter(user =>
+          user.cityAddress?.toLowerCase() === cityFilterLower
+        );
       }
 
-      const data = await response.json();
-      setSearchResults(data);
+      // Manual filtering by Country
+      if (countryFilter.trim()) {
+        const countryFilterLower = countryFilter.toLowerCase();
+        results = results.filter(user =>
+          user.countryAddress?.toLowerCase() === countryFilterLower
+        );
+      }
+
+      setSearchResults(results);
+
     } catch (err) {
       console.error('Error searching users:', err);
       setError('Failed to retrieve search results.');
+    } finally {
+      setLoading(false);
     }
   };
+
 
   // Live search effect
   useEffect(() => {
@@ -54,8 +81,8 @@ function SearchUsers() {
   return (
     <div className="min-h-screen bg-[#F4F4F4]">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-20">
-        <div className="bg-white rounded-lg p-12 mb-10">
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        <div className="bg-white mt-18 rounded-lg p-12 mb-10">
           <h2 className="text-2xl font-bold mb-6 text-[#313131]">User Search</h2>
 
           <div className="space-y-4">
@@ -82,6 +109,7 @@ function SearchUsers() {
             />
           </div>
 
+          {loading && <p style={{ textAlign: 'center', fontSize: '1.25rem', fontWeight: 'bold', color: '#365643' }}>Searching...</p>}
           {error && <p style={{ color: 'red' }}>{error}</p>}
 
           <div><h2 className="text-2xl font-bold mb-4 mt-5 text-[#313131]">Results</h2></div>
@@ -102,13 +130,14 @@ function SearchUsers() {
                     <p className="text-[#808080] text-sm">
                       {user.cityAddress ? `${user.cityAddress}, ` : ''}
                       {user.countryAddress ? user.countryAddress : ''}
+                      {!user.cityAddress && !user.countryAddress ? '' : ''}
                     </p>
                   </div>
                 </li>
               ))}
             </ul>
-            {searchResults.length === 0 && searchTerm.trim() !== '' && (
-              <p className="text-[#FF0000] mt-4">User not found.</p>
+            {searchResults.length === 0 && !loading && searchTerm.trim() !== '' && (
+              <p className="text-[#FF0000] mt-4">No results found.</p>
             )}
           </div>
         </div>
