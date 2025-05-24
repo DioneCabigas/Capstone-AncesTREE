@@ -1,0 +1,53 @@
+const familyGroupService = require('../services/familyGroupService');
+
+exports.createGroup = async (req, res) => {
+  const { userId, treeId, name, description } = req.body;
+
+  if (!userId || !treeId || !name) {
+    return res.status(400).json({ message: 'userId, treeId, and name are required.' });
+  }
+
+  try {
+    const id = await familyGroupService.createGroup(userId, treeId, name, description);
+    res.status(200).json({ message: 'Family group created.', id });
+  } catch (error) {
+    console.error('Error creating group:', error);
+    res.status(500).json({ message: 'Failed to create group.' });
+  }
+};
+
+exports.getGroupById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const group = await familyGroupService.getGroupById(id);
+    res.status(200).json(group);
+  } catch (error) {
+    console.error('Error retrieving group:', error);
+    res.status(500).json({ message: 'Failed to retrieve group.' });
+  }
+};
+
+exports.getGroupsByUser = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const groups = await familyGroupService.getGroupsByUser(userId);
+    res.status(200).json(groups);
+  } catch (error) {
+    console.error('Error retrieving user groups:', error);
+    res.status(500).json({ message: 'Failed to retrieve user groups.' });
+  }
+};
+
+exports.deleteGroup = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await familyGroupService.deleteGroup(id);
+    res.status(200).json({ message: 'Group deleted.' });
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ message: 'Failed to delete group.' });
+  }
+};
