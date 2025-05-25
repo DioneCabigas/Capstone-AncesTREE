@@ -14,8 +14,6 @@ function SearchUsers() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-
-
   const handleSearch = async (term) => {
     setLoading(true);
     setError('');
@@ -83,8 +81,8 @@ function SearchUsers() {
   return (
     <div className="min-h-screen bg-[#F4F4F4]">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-20">
-        <div className="bg-white rounded-lg p-12 mb-10">
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        <div className="bg-white mt-18 rounded-lg p-12 mb-10">
           <h2 className="text-2xl font-bold mb-6 text-[#313131]">User Search</h2>
 
           <div className="space-y-4">
