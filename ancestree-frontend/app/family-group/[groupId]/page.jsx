@@ -115,7 +115,7 @@ function ViewGroupPage() {
 
   const handleDescriptionSave = async () => {
     try {
-      await axios.put(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`, {
+      await axios.patch(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}/description`, {
         description: editedDescription,
       });
       setGroup(prevGroup => ({ ...prevGroup, description: editedDescription }));

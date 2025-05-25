@@ -2,8 +2,6 @@
 
 import Navbar from '../../components/Navbar';
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../utils/firebase';
 import { FaUserCircle } from 'react-icons/fa'; // Import a user icon
 
 function SearchUsers() {
@@ -15,58 +13,35 @@ function SearchUsers() {
   const [error, setError] = useState('');
 
   const handleSearch = async (term) => {
-    setLoading(true);
-    setError('');
+  const trimmedTerm = term.trim();
+  if (!trimmedTerm) {
     setSearchResults([]);
+    return;
+  }
 
-    if (!term.trim()) {
-      setLoading(false);
-      return;
-    }
+  setLoading(true);
+  setError('');
+  setSearchResults([]);
 
-    try {
-      const usersRef = collection(db, 'users');
-      const searchTermLower = term.toLowerCase().trim();
-      const searchTokens = searchTermLower.split(' ').filter(token => token !== ''); // Split search term into words
+  try {
+    const params = new URLSearchParams({
+      search: trimmedTerm,
+      city: cityFilter.trim(),
+      country: countryFilter.trim(),
+    });
 
-      const querySnapshot = await getDocs(usersRef);
-      const allUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const res = await fetch(`http://localhost:3001/api/user?${params.toString()}`);
+    if (!res.ok) throw new Error('Network response was not ok');
 
-      const filteredResults = allUsers.filter(user => {
-        const firstNameLower = user.firstName.toLowerCase();
-        const lastNameLower = user.lastName.toLowerCase();
-
-        // Check if all search tokens are found in either the first or last name
-        return searchTokens.every(token => firstNameLower.includes(token) || lastNameLower.includes(token));
-      });
-
-      let results = filteredResults;
-
-      // Manual filtering by City
-      if (cityFilter.trim()) {
-        const cityFilterLower = cityFilter.toLowerCase();
-        results = results.filter(user =>
-          user.cityAddress?.toLowerCase() === cityFilterLower
-        );
-      }
-
-      // Manual filtering by Country
-      if (countryFilter.trim()) {
-        const countryFilterLower = countryFilter.toLowerCase();
-        results = results.filter(user =>
-          user.countryAddress?.toLowerCase() === countryFilterLower
-        );
-      }
-
-      setSearchResults(results);
-
-    } catch (err) {
-      console.error('Error searching users:', err);
-      setError('Failed to retrieve search results.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const data = await res.json();
+    setSearchResults(data);
+  } catch (err) {
+    console.error('Error searching users:', err);
+    setError('Failed to retrieve search results.');
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   // Live search effect
