@@ -52,3 +52,15 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete user.' });
   }
 };
+
+exports.searchUsers = async (req, res) => {
+  const { search = '', city = '', country = '' } = req.query;
+
+  try {
+    const users = await userService.searchUsers(search, city, country);
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ message: 'Failed to search users.' });
+  }
+};

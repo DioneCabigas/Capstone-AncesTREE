@@ -40,6 +40,24 @@ exports.getGroupsByUser = async (req, res) => {
   }
 };
 
+exports.updateGroupDescription = async (req, res) => {
+  const { groupId } = req.params;
+  const { description } = req.body;
+
+  if (!description) {
+    return res.status(400).json({ message: 'Description is required.' });
+  }
+
+  try {
+    await familyGroupService.updateGroupDescription(groupId, description);
+    res.status(200).json({ message: 'Group description updated.' });
+  } catch (error) {
+    console.error('Error updating group description:', error);
+    res.status(500).json({ message: 'Failed to update description.' });
+  }
+};
+
+
 exports.deleteGroup = async (req, res) => {
   const { id } = req.params;
 

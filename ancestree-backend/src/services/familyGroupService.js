@@ -21,6 +21,12 @@ exports.getGroupsByUser = async (userId) => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
+exports.updateGroupDescription = async (groupId, description) => {
+  const docRef = collection.doc(groupId);
+  await docRef.update({ description });
+};
+
+
 exports.deleteGroup = async (groupId) => {
   await collection.doc(groupId).delete();
 };
