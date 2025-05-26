@@ -1079,7 +1079,7 @@ function ProfilePage() {
                   connectionLoading 
                     ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
                     : connectionState === 'connected'
-                      ? "bg-[#365643] text-white cursor-default"
+                      ? "bg-[#ffffff] text-365643 cursor-default"
                       : connectionState === 'pending'
                         ? "bg-gray-400 text-white cursor-default"
                         : "bg-[#4F6F52] text-white"
