@@ -29,6 +29,8 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationLoading, setNotificationLoading] = useState(false);
+  const [lastNotificationCheck, setLastNotificationCheck] = useState(new Date());
+  const [shownBrowserNotifications, setShownBrowserNotifications] = useState(new Set());
   
   const menuRef = useRef(null);
   const notificationRef = useRef(null);
@@ -62,22 +64,59 @@ export default function Navbar() {
     return () => unsubscribe();
   }, []);
 
-  // Poll for notifications every 30 seconds when user is authenticated
+  // Request browser notification permission on component mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      // Request permission when component mounts (non-intrusive)
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Real-time notification polling with much more conservative approach
   useEffect(() => {
     let intervalId;
+    let visibilityChangeHandler;
     
     if (user) {
+      // Strategy 1: Much more conservative polling - every 60 seconds
       intervalId = setInterval(() => {
         fetchNotifications(user.uid);
-      }, 30000); // Check every 30 seconds
+      }, 60000); // Every 1 minute instead of 15 seconds
+      
+      // Strategy 2: Check when tab becomes visible again
+      visibilityChangeHandler = () => {
+        if (!document.hidden && user) {
+          fetchNotifications(user.uid);
+        }
+      };
+      
+      document.addEventListener('visibilitychange', visibilityChangeHandler);
     }
     
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
+      if (intervalId) clearInterval(intervalId);
+      if (visibilityChangeHandler) {
+        document.removeEventListener('visibilitychange', visibilityChangeHandler);
       }
     };
   }, [user]);
+
+  // Only poll when notifications dropdown is opened
+  useEffect(() => {
+    if (notificationsOpen && user) {
+      // Immediately fetch when opened
+      fetchNotifications(user.uid);
+      
+      // Set up polling while dropdown is open (every 10 seconds)
+      const aggressiveInterval = setInterval(() => {
+        fetchNotifications(user.uid);
+      }, 10000);
+      
+      return () => {
+        clearInterval(aggressiveInterval);
+      };
+    }
+  }, [notificationsOpen, user]);
 
   // Listen for user data changes from ProfilePage
   useEffect(() => {
@@ -117,20 +156,23 @@ export default function Navbar() {
   }, []);
 
   /**
-   * Fetch notifications for the current user
-   * This includes:
-   * - Pending connection requests (for receiver)
-   * - Connection status updates (for requester)
+   * Enhanced real-time notification fetching with smart duplicate prevention
    */
   const fetchNotifications = async (userId) => {
     if (!userId) return;
     
-    setNotificationLoading(true);
+    // Don't show loading on frequent updates to avoid UI flickering
+    const shouldShowLoading = notifications.length === 0;
+    if (shouldShowLoading) {
+      setNotificationLoading(true);
+    }
     
     try {
       // Get all connections involving this user
-      const connectionsResponse = await axios.get(`/api/connections/${userId}`);
-      const pendingResponse = await axios.get(`/api/connections/${userId}/pending`);
+      const [connectionsResponse, pendingResponse] = await Promise.all([
+        axios.get(`/api/connections/${userId}`).catch(() => ({ data: [] })),
+        axios.get(`/api/connections/${userId}/pending`).catch(() => ({ data: [] }))
+      ]);
       
       const allConnections = connectionsResponse.data || [];
       const pendingConnections = pendingResponse.data || [];
@@ -160,48 +202,95 @@ export default function Navbar() {
       }
       
       // Check for recently updated connections (accepted/rejected)
-      // This is a simplified version - in a real app, you'd want to track status changes
+      const now = new Date();
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
       const recentlyUpdated = allConnections.filter(conn => {
         const updatedAt = new Date(conn.updatedAt || conn.createdAt);
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        return updatedAt > oneDayAgo && conn.status !== 'pending';
+        return updatedAt > oneDayAgo && conn.status !== 'pending' && conn.requester === userId;
       });
       
       for (const connection of recentlyUpdated) {
-        if (connection.requester === userId) {
-          // This user was the requester, notify about status change
-          const receiverDetails = await fetchUserDetails(connection.receiver);
-          const receiverName = receiverDetails 
-            ? `${receiverDetails.firstName} ${receiverDetails.lastName}` 
-            : "Someone";
-          
-          const statusMessage = connection.status === 'accepted'
-            ? `${receiverName} has accepted your connection request`
-            : `${receiverName} has denied your connection request`;
-          
-          notificationList.push({
-            id: `status_${connection.id}`,
-            type: connection.status === 'accepted' ? 'connection_accepted' : 'connection_denied',
-            message: statusMessage,
-            timestamp: connection.updatedAt || connection.createdAt,
-            connectionId: connection.id,
-            fromUserId: connection.receiver,
-            fromUserName: receiverName,
-            isRead: false
-          });
-        }
+        // This user was the requester, notify about status change
+        const receiverDetails = await fetchUserDetails(connection.receiver);
+        const receiverName = receiverDetails 
+          ? `${receiverDetails.firstName} ${receiverDetails.lastName}` 
+          : "Someone";
+        
+        const statusMessage = connection.status === 'accepted'
+          ? `${receiverName} has accepted your connection request`
+          : `${receiverName} has denied your connection request`;
+        
+        notificationList.push({
+          id: `status_${connection.id}`,
+          type: connection.status === 'accepted' ? 'connection_accepted' : 'connection_denied',
+          message: statusMessage,
+          timestamp: connection.updatedAt || connection.createdAt,
+          connectionId: connection.id,
+          fromUserId: connection.receiver,
+          fromUserName: receiverName,
+          isRead: false
+        });
       }
       
       // Sort notifications by timestamp (newest first)
       notificationList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      // SMART NOTIFICATION DETECTION: Only show browser notifications for truly NEW items
+      const previousNotificationIds = new Set(notifications.map(n => n.id));
+      const currentTime = new Date();
+      
+      const genuinelyNewNotifications = notificationList.filter(n => {
+        // Must be a new notification ID
+        if (previousNotificationIds.has(n.id)) return false;
+        
+        // Must not have been shown before
+        if (shownBrowserNotifications.has(n.id)) return false;
+        
+        // Must be unread
+        if (n.isRead) return false;
+        
+        // Must be created after our last check (this prevents showing old notifications)
+        const notificationTime = new Date(n.timestamp);
+        if (notificationTime <= lastNotificationCheck) return false;
+        
+        // Must be recent (within last 10 minutes)
+        const timeDiff = currentTime - notificationTime;
+        if (timeDiff > 10 * 60 * 1000) return false;
+        
+        return true;
+      });
+      
+      // Only show browser notification for genuinely new items
+      if (genuinelyNewNotifications.length > 0 && 'Notification' in window && Notification.permission === 'granted') {
+        // Show only the latest notification to avoid spam
+        const latestNotification = genuinelyNewNotifications[0];
+        
+        new Notification('AncesTree', {
+          body: latestNotification.message,
+          icon: '/images/AncesTree_Logo.png',
+          tag: 'ancestree-notification', // This will replace previous notifications
+          requireInteraction: false, // Auto-close after a few seconds
+          silent: false
+        });
+        
+        // Mark this notification as shown
+        setShownBrowserNotifications(prev => new Set([...prev, latestNotification.id]));
+      }
+      
+      // Update the last check time
+      setLastNotificationCheck(currentTime);
       
       setNotifications(notificationList);
       setUnreadCount(notificationList.filter(n => !n.isRead).length);
       
     } catch (error) {
       console.error("Error fetching notifications:", error);
+      // Don't clear existing notifications on error, just log it
     } finally {
-      setNotificationLoading(false);
+      if (shouldShowLoading) {
+        setNotificationLoading(false);
+      }
     }
   };
 
@@ -219,27 +308,36 @@ export default function Navbar() {
   };
 
   /**
-   * Handle connection request response (accept/deny)
+   * Enhanced connection response handler with immediate UI updates
    */
   const handleConnectionResponse = async (connectionId, status) => {
+    // Optimistic update - immediately update UI
+    const updatedNotifications = notifications.filter(n => n.connectionId !== connectionId);
+    setNotifications(updatedNotifications);
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    
     try {
       await axios.put(`/api/connections/${connectionId}`, { status });
       
-      // Remove the notification after handling
-      setNotifications(prev => prev.filter(n => n.connectionId !== connectionId));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      // Immediately refresh to get any new notifications
+      if (user) {
+        setTimeout(() => {
+          fetchNotifications(user.uid);
+        }, 500); // Small delay to allow backend to process
+      }
       
-      // Refresh notifications
+    } catch (error) {
+      console.error("Error responding to connection request:", error);
+      
+      // Revert optimistic update on error
       if (user) {
         fetchNotifications(user.uid);
       }
-    } catch (error) {
-      console.error("Error responding to connection request:", error);
     }
   };
 
   /**
-   * Mark notification as read
+   * Enhanced mark as read with immediate update
    */
   const markAsRead = (notificationId) => {
     setNotifications(prev => 
@@ -248,14 +346,28 @@ export default function Navbar() {
       )
     );
     setUnreadCount(prev => Math.max(0, prev - 1));
+    
+    // Optionally persist read status to backend
+    // You could add an API call here to track read notifications
   };
 
   /**
-   * Clear all notifications
+   * Enhanced clear all with confirmation for better UX
    */
   const clearAllNotifications = () => {
+    if (notifications.length === 0) return;
+    
+    // Optional: Add confirmation for many notifications
+    if (notifications.length > 5) {
+      if (!window.confirm(`Are you sure you want to clear all ${notifications.length} notifications?`)) {
+        return;
+      }
+    }
+    
     setNotifications([]);
     setUnreadCount(0);
+    
+    // Optionally, you could add an API call here to mark all as read/dismissed
   };
 
   /**
@@ -389,11 +501,7 @@ export default function Navbar() {
 
                     {/* Notifications List */}
                     <div className="max-h-80 overflow-y-auto">
-                      {notificationLoading ? (
-                        <div className="p-4 text-center text-[#4F6F52]">
-                          Loading notifications...
-                        </div>
-                      ) : notifications.length === 0 ? (
+                      {notifications.length === 0 ? (
                         <div className="p-4 text-center text-gray-500">
                           No notifications yet
                         </div>
