@@ -7,6 +7,8 @@ const userRoutes = require('./routes/userRoutes');
 const connectionRoutes = require('./routes/connectionRoutes');
 const familyGroupRoutes = require('./routes/familyGroupRoutes');
 const familyGroupMembersRoutes = require('./routes/familyGroupMembersRoutes');
+const familyTreeRoutes = require('./routes/familyTreeRoutes');
+const personRoutes = require('./routes/personRoutes');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -20,6 +22,8 @@ app.use('/api/user', userRoutes);
 app.use('/api/connections', connectionRoutes);
 app.use('/api/family-groups', familyGroupRoutes);
 app.use('/api/family-group-members', familyGroupMembersRoutes);
+app.use('/api/family-trees', familyTreeRoutes);
+app.use('/api/persons', personRoutes);
 
 // For testing purposes (Ignore lng ni ninyo)
 const testRoutes = require('../tests/routes/testRoutes');
