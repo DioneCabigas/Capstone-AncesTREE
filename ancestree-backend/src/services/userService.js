@@ -14,7 +14,7 @@ exports.createUser = async (uid, data) => {
 exports.getUser = async (uid) => {
   const doc = await dbAdmin.collection('users').doc(uid).get();
   if (!doc.exists) return null;
-  return doc.data();
+  return doc.data();  
 };
 
 exports.updateUser = async (uid, updatedData) => {

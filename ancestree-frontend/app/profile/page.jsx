@@ -424,7 +424,7 @@ function ProfilePage() {
       // Try the primary endpoint
       let response;
       try {
-        response = await axios.delete(`/api/connection/${connectionId}`);
+        response = await axios.delete(`/api/connections/${connectionId}`);
       } catch (error) {
         if (error.response?.status === 404) {
           // Try alternative endpoint format

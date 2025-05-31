@@ -1,6 +1,6 @@
 const { uploadImageToStorage, getImagesByUser } = require('../services/galleryService');
 
-exports.uploadImage = async (req, res) => {
+exports.upoadUserImages = async (req, res) => {
   try {
     const userId = req.params.userId;
     const file = req.file;

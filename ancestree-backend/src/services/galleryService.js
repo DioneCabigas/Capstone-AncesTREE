@@ -1,7 +1,7 @@
 const admin = require('../config/database');
 const db = admin.firestore();
 
-exports.uploadImageToStorage = async (file, userId) => {
+exports.uploadUserImages = async (file, userId) => {
   const fileName = `gallery/${userId}/${Date.now()}_${file.originalname}`;
   const storageFile = admin.bucket.file(fileName);
 
@@ -32,7 +32,7 @@ exports.uploadImageToStorage = async (file, userId) => {
   });
 };
 
-exports.getImagesByUser = async (userId) => {
+exports.getUserImages = async (userId) => {
   const snapshot = await db.collection('galleryImages')
     .where('userId', '==', userId)
     .get();
