@@ -19,24 +19,23 @@ function LoginContent() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        
-        // If user is authenticated, fetch their data from Firestore
-        if (currentUser) {
-          try {
-            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-            // if (userDoc.exists()) {
-            //   setUserData(userDoc.data());
-            // }
-          } catch (error) {
-            console.error("Error fetching user data:", error);
-          }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          // if (userDoc.exists()) {
+          //   setUserData(userDoc.data());
+          // }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
         }
-      });
-  
-      return () => unsubscribe();
-    }, []);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
   const onLogin = async (event) => {
     event.preventDefault();
@@ -63,10 +62,18 @@ function LoginContent() {
         }
         router.push("/home");
       } else {
-        setError("Please verify your email before logging in.")
+        setError("Please verify your email before logging in.");
       }
     } catch (error) {
-      if (error instanceof Error) {
+      // Check for specific Firebase authentication error codes related to invalid credentials
+      if (
+        error.code === 'auth/invalid-credential' ||
+        error.code === 'auth/wrong-password' ||
+        error.code === 'auth/user-not-found' ||
+        error.code === 'auth/invalid-email'
+      ) {
+        setError("Invalid email or password. Please try again.");
+      } else if (error instanceof Error) {
         setError(error.message);
       } else {
         setError("An unknown error occurred, please try again.");
@@ -83,11 +90,16 @@ function LoginContent() {
           <Image src="/images/AncesTree_Logo.png" alt="Logo" width={135} height={40}/>
         </Link>
         <div className="w-full max-w-sm">
-  
+ 
           <h2 className="text-4xl font-bold text-center mb-1"><span className="text-[#365643]">WELCOME</span> BACK!</h2>
           <p className="text-sm text-gray-500 text-center mb-6">Ready to manage your Family Tree again?</p>
-  
+ 
           <form className="pt-6" onSubmit={onLogin}>
+            {error && (
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                <span className="block sm:inline">{error}</span>
+              </div>
+            )}
             <div className="mb-4">
               <label className="block text-gray-700 text-base mb-2">Email</label>
               <input
@@ -99,7 +111,7 @@ function LoginContent() {
                 required
               />
             </div>
-  
+ 
             <div className="mb-4">
               <label className="block text-gray-700 text-base mb-2">Password</label>
               <input
@@ -111,25 +123,25 @@ function LoginContent() {
                 required
               />
             </div>
-  
+ 
             <div className="text-right text-sm mb-6 pb-5">
               <a href="#" className="text-[#365643] hover:underline">Forgot Password?</a>
             </div>
-  
+ 
             <button
               type="submit"
               className="w-full bg-[#365643] hover:bg-[#294032] text-white py-2 px-4 rounded-md"
             >
               LOGIN
             </button>
-  
+ 
             <p className="text-sm text-center mt-6 text-gray-700">
               Don’t have an account? <a href="/auth/signup" className="text-[#365643] hover:underline font-semibold">Sign Up</a>
             </p>
           </form>
         </div>
       </div>
-  
+ 
       {/* Right side - Background image */}
       <div
         className="hidden md:block md:w-1/2 bg-cover bg-center"

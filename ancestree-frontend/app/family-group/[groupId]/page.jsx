@@ -7,6 +7,7 @@ import axios from 'axios';
 import { ArrowLeft, Edit, User, Users, ChevronDown, Check, X as XMark } from 'lucide-react';
 import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import InviteMembersModal from '@/components/InviteMembersModal'; // Import the new modal component
 
 function ViewGroupPage() {
   const { groupId } = useParams();
@@ -22,25 +23,76 @@ function ViewGroupPage() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentUserName, setCurrentUserName] = useState('');
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false); // New state for invite modal
 
   const BACKEND_BASE_URL = 'http://localhost:3001';
   const API_FAMILY_GROUPS_PATH = '/api/family-groups';
   const API_FAMILY_GROUP_MEMBERS_PATH = '/api/family-group-members';
+  const API_USERS_PATH = '/api/user'; // Added for fetching user details for members
 
-  // Function to get initials for avatars - temporary
+  // Function to get initials for avatars
   const getInitials = (firstName, lastName) => {
     if (!firstName && !lastName) return 'N/A';
     return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
   };
 
-  // useEffect to get current user's information
+  // Function to fetch group details and all its members with their user details
+  const fetchGroupAndMembers = async () => {
+    if (!groupId) {
+      setIsLoading(false);
+      setError("Group ID is missing.");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      // Fetch group details
+      const groupResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`);
+      if (groupResponse.status === 200) {
+        setGroup(groupResponse.data);
+        setEditedDescription(groupResponse.data.description || '');
+        // Initialize isPrivate state from fetched group data
+        setIsPrivate(groupResponse.data.isPrivate || false);
+      } else {
+        throw new Error(`Failed to fetch group: ${groupResponse.statusText}`);
+      }
+
+      // Fetch members of the group
+      const membersResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUP_MEMBERS_PATH}/group/${groupId}`);
+      if (membersResponse.status === 200) {
+          // For each member, fetch their full user details to display names and other info
+          const membersWithDetails = await Promise.all(
+            membersResponse.data.map(async (member) => {
+              try {
+                  const userResponse = await axios.get(`${BACKEND_BASE_URL}${API_USERS_PATH}/${member.userId}`);
+                  return { ...member, userDetails: userResponse.data };
+              } catch (userErr) {
+                  console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
+                  return { ...member, userDetails: null }; // Return null if user details can't be fetched
+              }
+            })
+          );
+          setMembers(membersWithDetails);
+      }
+
+    } catch (err) {
+      console.error("Error fetching group details or members:", err);
+      // Set a user-friendly error message
+      setError(err.response?.data?.message || "Failed to load group details or members.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // useEffect to get current authenticated user's information
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUserId(user.uid);
         try {
-          axios.defaults.baseURL = BACKEND_BASE_URL;
-          const response = await axios.get(`${BACKEND_BASE_URL}/api/user/${user.uid}`);
+          axios.defaults.baseURL = BACKEND_BASE_URL; // Ensure axios base URL is set
+          const response = await axios.get(`${BACKEND_BASE_URL}${API_USERS_PATH}/${user.uid}`);
           if (response.data && response.data.firstName) {
             setCurrentUserName(`${response.data.firstName} ${response.data.lastName || ''}`);
             setStartingPerson(`${response.data.firstName} ${response.data.lastName || ''}`);
@@ -56,58 +108,17 @@ function ViewGroupPage() {
       } else {
         setCurrentUserId(null);
         setCurrentUserName('');
-        setStartingPerson('Not logged in'); // Set to 'Not logged in' if no user
+        setStartingPerson('Not logged in');
       }
     });
 
-    return () => unsubscribe();
+    return () => unsubscribe(); // Cleanup function for the Firebase auth listener
   }, []);
 
+  // Effect hook to fetch group details and members when groupId changes
   useEffect(() => {
-    if (!groupId) {
-      setIsLoading(false);
-      setError("Group ID is missing.");
-      return;
-    }
-
-    const fetchGroupDetails = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const groupResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`);
-        if (groupResponse.status === 200) {
-          setGroup(groupResponse.data);
-          setEditedDescription(groupResponse.data.description || '');
-        } else {
-          throw new Error(`Failed to fetch group: ${groupResponse.statusText}`);
-        }
-
-        const membersResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUP_MEMBERS_PATH}/group/${groupId}`);
-        if (membersResponse.status === 200) {
-            const membersWithDetails = await Promise.all(
-              membersResponse.data.map(async (member) => {
-                try {
-                    const userResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${member.userId}`);
-                    return { ...member, userDetails: userResponse.data };
-                } catch (userErr) {
-                    console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
-                    return { ...member, userDetails: null };
-                }
-              })
-            );
-            setMembers(membersWithDetails);
-        }
-
-      } catch (err) {
-        console.error("Error fetching group details:", err);
-        setError(err.response?.data?.message || "Failed to load group details.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchGroupDetails();
-  }, [groupId]);
+    fetchGroupAndMembers();
+  }, [groupId]); // Dependency array: re-run if groupId changes
 
   const handleDescriptionEdit = () => {
     setIsEditingDescription(true);
@@ -131,28 +142,35 @@ function ViewGroupPage() {
     setIsEditingDescription(false);
   };
 
+  // Group Privacy
   const handleTogglePrivacy = async () => {
     const newPrivacyStatus = !isPrivate;
     try {
+      // Commented out backend interaction for privacy as it's not yet implemented
+      // await axios.patch(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}/privacy`, {
+      //   isPrivate: newPrivacyStatus,
+      // });
+      // Optimistically update state even if backend call is commented out
       setIsPrivate(newPrivacyStatus);
+      setGroup(prevGroup => ({ ...prevGroup, isPrivate: newPrivacyStatus }));
+      console.log(`Privacy toggled to: ${newPrivacyStatus}. Backend update commented out.`);
     } catch (err) {
-      console.error("Error updating privacy setting:", err);
-      setError("Failed to update privacy setting.");
+      console.error("Error updating privacy setting (frontend only):", err);
+      setError("Failed to update privacy setting (frontend only).");
     }
   };
 
   // Function to handle group deletion
   const handleDeleteGroup = async () => {
     try {
-      // Close the confirmation modal for deletion
-      setShowDeleteConfirmModal(false);
-      setIsLoading(true);
+      setShowDeleteConfirmModal(false); // Close confirmation modal
+      setIsLoading(true); // Show loading state
 
-      // Call Delete API
+      // Send DELETE request to remove the group
       const response = await axios.delete(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`);
 
       if (response.status === 200) {
-        router.push('/family-group');
+        router.push('/family-group'); // Redirect to family groups list on success
       } else {
         throw new Error(`Failed to delete group: ${response.statusText}`);
       }
@@ -162,6 +180,16 @@ function ViewGroupPage() {
       setIsLoading(false);
     }
   };
+
+  // Determine the current user's role in the group for UI conditional rendering (Frontend RBAC)
+  const currentUserMembership = members.find(member => member.userId === currentUserId);
+  const currentUserRole = currentUserMembership?.role;
+  const isOwner = currentUserRole === 'Owner';
+  const isAdmin = currentUserRole === 'Admin';
+  const canEditGroup = isOwner || isAdmin; // Owners and Admins can perform certain edits/invites
+
+  // Get existing member IDs to pass to the invite modal for filtering
+  const existingMemberIds = members.map(member => member.userId);
 
   if (isLoading) {
     return (
@@ -223,23 +251,26 @@ function ViewGroupPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Left Column (Family Group Description, Settings) */}
           <div className="md:col-span-2 space-y-6">
-            {/* Family Group Description */}
+            {/* Family Group Description Card */}
             <div className="bg-white rounded-lg p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-[#313131]">Family Group Description</h2>
-                {isEditingDescription ? (
-                  <div className="flex gap-2">
-                    <button onClick={handleDescriptionSave} className="text-[#365643] hover:text-[#4F6F52] flex items-center">
-                      <Check className="w-5 h-5" /> Save
+                {/* Conditionally render edit/save/cancel buttons based on user role */}
+                {canEditGroup && (
+                  isEditingDescription ? (
+                    <div className="flex gap-2">
+                      <button onClick={handleDescriptionSave} className="text-[#365643] hover:text-[#4F6F52] flex items-center">
+                        <Check className="w-5 h-5" /> Save
+                      </button>
+                      <button onClick={handleDescriptionCancel} className="text-red-500 hover:text-red-700 flex items-center">
+                        <XMark className="w-5 h-5" /> Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={handleDescriptionEdit} className="text-[#313131] hover:text-[#4F6F52]">
+                      <Edit className="w-5 h-5" />
                     </button>
-                    <button onClick={handleDescriptionCancel} className="text-red-500 hover:text-red-700 flex items-center">
-                      <XMark className="w-5 h-5" /> Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={handleDescriptionEdit} className="text-[#313131] hover:text-[#4F6F52]">
-                    <Edit className="w-5 h-5" />
-                  </button>
+                  )
                 )}
               </div>
               {isEditingDescription ? (
@@ -255,10 +286,11 @@ function ViewGroupPage() {
               )}
             </div>
 
-            {/* Family Group Settings */}
+            {/* Family Group Settings Card */}
             <div className="bg-white rounded-lg p-6 shadow-md">
               <h2 className="text-xl font-semibold text-[#313131] mb-4">Family Group Settings</h2>
 
+              {/* Privacy Toggle */}
               <div className="flex justify-between items-center py-3 border-b border-[#F2F2F2]">
                 <div>
                   <p className="text-[#313131] font-medium">Private</p>
@@ -266,18 +298,24 @@ function ViewGroupPage() {
                     Only group Owner / Admins can send invites and create invite links
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    value=""
-                    className="sr-only peer"
-                    checked={isPrivate}
-                    onChange={handleTogglePrivacy}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#365643]"></div>
-                </label>
+                
+                {/* Only allow owner/admin to toggle privacy */}
+                {canEditGroup && (
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      value=""
+                      className="sr-only peer"
+                      checked={isPrivate}
+                      onChange={handleTogglePrivacy}
+                      disabled={!canEditGroup} // Disable if not owner/admin
+                    />
+                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#365643]"></div>
+                  </label>
+                )}
               </div>
 
+              {/* Starting Person */}
               <div className="flex justify-between items-center py-3">
                 <div>
                   <p className="text-[#313131] font-medium">Starting Person</p>
@@ -292,46 +330,66 @@ function ViewGroupPage() {
                 </div>
               </div>
 
+              {/* Action Buttons: Leave Group, Delete Group */}
               <div className="mt-6 flex gap-4">
+                {/* Placeholder for Leave Group button */}
                 <button
                   className="bg-red-500 text-white hover:bg-red-600 px-6 py-2 rounded-md"
                   onClick={() => console.log('Leave Group clicked')}
                 >
                   Leave Group
                 </button>
-                <button
-                  className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md"
-                  onClick={() => setShowDeleteConfirmModal(true)}
-                >
-                  Delete Group
-                </button>
+                {/* Show Delete Group button only if current user is the owner */}
+                {isOwner && (
+                  <button
+                    className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md"
+                    onClick={() => setShowDeleteConfirmModal(true)}
+                  >
+                    Delete Group
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
           {/* Right Column (Members) */}
           <div className="md:col-span-1 space-y-6">
-            {/* Members */}
+            {/* Members Card */}
             <div className="bg-white rounded-lg p-6 shadow-md">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-[#313131]">Members ({members.length})</h2>
-                <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-4 py-2 rounded-md text-sm">
-                  Invite
-                </button>
+                {/* Only show Invite button if current user is owner/admin */}
+                {canEditGroup && (
+                  <button
+                    onClick={() => setShowInviteModal(true)} // Open invite modal
+                    className="bg-[#365643] text-white hover:bg-[#4F6F52] px-4 py-2 rounded-md text-sm"
+                  >
+                    Invite
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 {members.length > 0 ? (
                   members.map((member) => (
-                    <div key={member.id} className="flex flex-col items-center p-3 border border-[#F2F2F2] rounded-lg">
+                    <div key={member.id} className="relative flex flex-col items-center p-3 border border-[#F2F2F2] rounded-lg">
                       <div className="w-16 h-16 rounded-full bg-[rgba(79,111,82,0.1)] flex items-center justify-center mb-2">
                         <span className="text-[#313131] font-bold text-2xl">
                           {getInitials(member.userDetails?.firstName, member.userDetails?.lastName)}
                         </span>
                       </div>
                       <p className="text-[#313131] font-medium text-sm text-center">
-                        {member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName}` : 'Unknown User'}
+                        {member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}` : 'Unknown User'}
                       </p>
                       <p className="text-[#808080] text-xs text-center">{member.role}</p>
+                      {canEditGroup && member.userId !== currentUserId && !(member.role === 'Owner' && members.filter(m => m.role === 'Owner').length === 1) && (
+                        <button
+                          onClick={() => handleRemoveMemberClick(member)}
+                          className="absolute top-1 right-1 text-red-400 hover:text-red-600 p-1 rounded-full bg-white/70 hover:bg-white"
+                          title="Remove Member"
+                        >
+                          <XMark className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -343,7 +401,7 @@ function ViewGroupPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Group Confirmation Modal */}
       {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
@@ -375,6 +433,17 @@ function ViewGroupPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invite Members Modal */}
+      {showInviteModal && (
+        <InviteMembersModal
+          groupId={groupId}
+          existingMembers={existingMemberIds}
+          currentUserId={currentUserId}
+          onClose={() => setShowInviteModal(false)}
+          onInviteSuccess={fetchGroupAndMembers} // Refresh Member List
+        />
       )}
     </div>
   );

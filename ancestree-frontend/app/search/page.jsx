@@ -2,7 +2,7 @@
 
 import Navbar from '../../components/Navbar';
 import { useState, useEffect, useCallback } from 'react';
-import { User as UserIcon, XCircle, Search as SearchIcon, X as XMark } from 'lucide-react';
+import { User as UserIcon, XCircle, Search as SearchIcon, X as XMark, Loader2 } from 'lucide-react'; // Import Loader2 for a spinner icon
 import axios from 'axios';
 
 function SearchUsers() {
@@ -11,6 +11,7 @@ function SearchUsers() {
   const [countryFilter, setCountryFilter] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // New loading state
 
   const BACKEND_BASE_URL = 'http://localhost:3001';
 
@@ -30,11 +31,13 @@ function SearchUsers() {
     if (!trimmedTerm && !trimmedCity && !trimmedCountry) {
       setSearchResults([]);
       setError('');
+      setIsLoading(false);
       return;
     }
 
     setError('');
     setSearchResults([]);
+    setIsLoading(true);
 
     try {
       const params = new URLSearchParams({
@@ -42,7 +45,7 @@ function SearchUsers() {
         city: trimmedCity,
         country: trimmedCountry,
       });
-
+      
       const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
       
       if (res.status === 200) {
@@ -54,6 +57,7 @@ function SearchUsers() {
       console.error('Error searching users:', err);
       setError(err.response?.data?.message || 'Failed to retrieve search results. Please try again.');
     } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -61,7 +65,7 @@ function SearchUsers() {
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       performSearch(searchTerm, cityFilter, countryFilter);
-    }, );
+    }, 100);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, cityFilter, countryFilter, performSearch]);
@@ -73,6 +77,7 @@ function SearchUsers() {
     setCountryFilter('');
     setSearchResults([]);
     setError('');
+    setIsLoading(false); // Reset loading state
   };
 
   // Active Criteria Checker
@@ -123,39 +128,46 @@ function SearchUsers() {
 
           <h2 className="text-2xl font-bold mb-4 mt-5 text-[#313131]">Results</h2>
           <div className="min-h-[150px]">
-            <ul className="space-y-3">
-              {searchResults.map((user) => (
-                <li key={user.id} className="flex items-center space-x-4 py-3 border-b border-gray-200 last:border-b-0">
-                  <div className="w-12 h-12 rounded-full bg-[rgba(79,111,82,0.1)] flex items-center justify-center flex-shrink-0">
-                    {user.firstName || user.lastName ? (
-                      <span className="text-[#313131] font-bold text-xl">
-                        {getInitials(user.firstName, user.lastName)}
-                      </span>
-                    ) : (
-                      <UserIcon className="text-[#808080] w-8 h-8" />
-                    )}
-                  </div>
-                  <div className="flex-grow">
-                    <a
-                      href={`/profile?userId=${user.id}`}
-                      className="text-[#313131] hover:underline font-medium block text-md"
-                    >
-                      {user.firstName} {user.lastName}
-                    </a>
-                    <p className="text-[#808080] text-sm">
-                      {user.cityAddress && user.countryAddress
-                        ? `${user.cityAddress}, ${user.countryAddress}`
-                        : user.cityAddress || user.countryAddress || ''}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {isLoading ? ( // Display loading indicator when loading
+              <div className="flex justify-center items-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-[#4F6F52]" />
+                <p className="ml-2 text-[#808080]">Searching...</p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {searchResults.map((user) => (
+                  <li key={user.id} className="flex items-center space-x-4 py-3 border-b border-gray-200 last:border-b-0">
+                    <div className="w-12 h-12 rounded-full bg-[rgba(79,111,82,0.1)] flex items-center justify-center flex-shrink-0">
+                      {user.firstName || user.lastName ? (
+                        <span className="text-[#313131] font-bold text-xl">
+                          {getInitials(user.firstName, user.lastName)}
+                        </span>
+                      ) : (
+                        <UserIcon className="text-[#808080] w-8 h-8" />
+                      )}
+                    </div>
+                    <div className="flex-grow">
+                      <a
+                        href={`/profile?userId=${user.id}`}
+                        className="text-[#313131] hover:underline font-medium block text-md"
+                      >
+                        {user.firstName} {user.lastName}
+                      </a>
+                      <p className="text-[#808080] text-sm">
+                        {user.cityAddress && user.countryAddress
+                          ? `${user.cityAddress}, ${user.countryAddress}`
+                          : user.cityAddress || user.countryAddress || ''}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-            {searchResults.length === 0 && isSearchCriteriaActive && (
+            {!isLoading && searchResults.length === 0 && isSearchCriteriaActive && (
               <p className="text-red-500 text-center mt-4">No results found for your search criteria.</p>
             )}
-             {searchResults.length === 0 && !isSearchCriteriaActive && (
+            {!isLoading && searchResults.length === 0 && !isSearchCriteriaActive && (
               <p className="text-[#808080] text-center mt-4">Start typing to search for users.</p>
             )}
           </div>
