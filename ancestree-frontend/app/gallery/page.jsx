@@ -1,6 +1,7 @@
 'use client';
 import axios from 'axios';
 import { useEffect, useState } from 'react';
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import Navbar from '../../components/Navbar'; // Import the shared Navbar component
 
 const MAX_PHOTOS = 20;
@@ -8,19 +9,36 @@ const MAX_SIZE_MB = 10;
 
 const Gallery = () => {
   const [photos, setPhotos] = useState([]);
+  const [userId, setUserId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchPhotos();
+  useEffect(() => { // Yaw lng ni hilabti kay mao ni mo kuha sa current Auth User [Dione]
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+        setPhotos([]);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
-  const fetchPhotos = async () => {
+  useEffect(() => {
+    if (userId) {
+      fetchPhotos();
+    }
+  }, [userId]);
+
+  const fetchPhotos = async () => { // Ako nalang gi modify daan [Dione]
     try {
-      const res = await axios.get('/api/gallery'); // Adjust endpoint as needed
-      setPhotos(res.data);
+      const res = await axios.get(`http://localhost:3001/api/gallery/user/${userId}`);
+      console.log('Photos:', res.data.images); 
+      setPhotos(res.data.images || []);
     } catch (err) {
       setError('Failed to load photos');
     }
@@ -40,11 +58,12 @@ const Gallery = () => {
   const handleUpload = async () => {
     if (!selectedFile) return;
     setUploading(true);
+    setError('');
     const formData = new FormData();
-    formData.append('photo', selectedFile);
-    // Add user info as needed
+    formData.append('file', selectedFile);
+
     try {
-      await axios.post('/api/gallery/upload', formData, {
+      await axios.post(`http://localhost:3001/api/gallery/upload/${userId}`, formData, { // Gi change na sad ni nako [Dione]
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setShowModal(false);
@@ -56,74 +75,77 @@ const Gallery = () => {
     setUploading(false);
   };
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#f7f7f7' }}>
-      {/* Navbar */}
-      <Navbar /> {/* Use the shared Navbar component */}
+  return ( // Gi change nako ni nga section kay wla naka Tailwind tanan [Dione]
+    <div className="min-h-screen bg-gray-100">
+      <Navbar />
 
-      {/* Gallery Content */}
-      <div style={{ padding: '2rem', paddingTop: '6rem', maxWidth: '1200px', margin: '0 auto' }}> {/* Added top padding to clear the fixed navbar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}> {/* Added bottom margin */}
-          <h2 style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#000' }}>Gallery</h2> {/* Adjusted font size, added bold and black color */}
+      <div className="max-w-6xl mx-auto px-6 py-12 pt-24">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-3xl font-bold text-black">Gallery</h2>
           <button
-            style={{ background: '#2d4a3a', color: '#fff', border: 'none', padding: '0.5rem 1.5rem', borderRadius: 5, fontWeight: 500, fontSize: 16, cursor: photos.length >= MAX_PHOTOS ? 'not-allowed' : 'pointer' }}
+            className={`px-6 py-2 rounded text-white font-medium ${
+              photos.length >= MAX_PHOTOS ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#365643] hover:bg-[#4F6F52]'
+            }`}
             onClick={() => setShowModal(true)}
             disabled={photos.length >= MAX_PHOTOS}
           >
             Upload
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
-          {photos.map(photo => (
-            <div key={photo.id} style={{ width: 220, borderRadius: 8, overflow: 'hidden', boxShadow: '0 2px 8px #eee', background: '#fff' }}>
-              <img src={photo.url} alt="" style={{ width: '100%', height: 150, objectFit: 'cover' }} />
-              <div style={{ padding: 10, background: '#fafafa' }}>
-                <div style={{ fontSize: 12, color: '#888' }}>By: {photo.uploader}</div>
-                <div style={{ fontSize: 12, color: '#888' }}>{new Date(photo.timestamp).toLocaleString()}</div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {photos.map((photo, idx) => (
+            <div key={idx} className="bg-white rounded-lg shadow overflow-hidden">
+              <img src={photo.imageUrl} alt="Gallery" className="w-full h-40 object-cover" />
+              <div className="p-3 bg-gray-50">
+                {/* <p className="text-xs text-gray-600">By: {photo.userId}</p> */}
+                <p className="text-xs text-gray-600">
+                  {photo.uploadedAt
+                    ? new Date(photo.uploadedAt._seconds * 1000).toLocaleString()
+                    : 'Unknown'}
+                </p>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Upload Modal */}
       {showModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-          background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <div style={{
-            background: '#fff', padding: 30, borderRadius: 10, minWidth: 350, boxShadow: '0 4px 24px #0002', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start'
-          }}>
-            <button onClick={() => setShowModal(false)} style={{
-              position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: 20, cursor: 'pointer'
-            }}>×</button>
-            {/* Modal Content */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}> {/* Wrapper for centering content */}
-              <h3 style={{ marginBottom: 10, fontWeight: 'bold', color: '#000', width: '100%', textAlign: 'left' }}>Upload Photo</h3>
-              <div style={{ fontSize: 14, color: '#444', marginBottom: 20, textAlign: 'left', width: '100%' }}>Select a photo to add to the gallery</div>
-              {/* File input and display container */}
-              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ccc', borderRadius: 5, padding: '0.5rem', marginBottom: 3, width: '100%' }}> {/* Adjusted bottom margin */}
-                <label style={{
-                  background: '#ccc', color: '#333', padding: '0.4rem 1rem', borderRadius: 5, cursor: 'pointer', fontSize: 14, fontWeight: 500, marginRight: 10
-                }}>
-                  Choose File
-                  <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                </label>
-                {selectedFile && <div style={{ fontSize: 14, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile.name}</div>}
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-80 relative shadow-lg">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-2 right-3 text-2xl font-bold cursor-pointer"
+            >
+              &times;
+            </button>
+
+            <h3 className="text-xl font-semibold mb-3">Upload Photo</h3>
+            <p className="mb-4 text-gray-700">Select a photo to add to your gallery.</p>
+
+            <label className="block mb-3">
+              <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+              <div className="cursor-pointer bg-gray-200 py-2 px-4 rounded text-center hover:bg-gray-300">
+                Choose File
               </div>
-              {/* Upload button container for centering */}
-              <div style={{ width: '100%', textAlign: 'center', marginTop: 3 }}> {/* Container for centering, adjusted top margin */}
-                <button
-                  style={{ background: '#2d4a3a', color: '#fff', border: 'none', padding: '0.75rem 1.2rem', borderRadius: 5, fontWeight: 500, fontSize: 16, cursor: uploading ? 'not-allowed' : 'pointer', display: 'inline-block' }} /* Adjusted horizontal padding for width */
-                  onClick={handleUpload}
-                  disabled={uploading}
-                >
-                  {uploading ? 'Uploading...' : 'Upload Photo'}
-                </button>
-              </div>
-              {error && <div style={{ color: 'red', marginTop: 15, fontSize: 14, width: '100%', textAlign: 'center' }}>{error}</div>}
-            </div>
+            </label>
+            {selectedFile && (
+              <p className="mb-3 text-sm text-gray-600 truncate">{selectedFile.name}</p>
+            )}
+
+            <button
+              onClick={handleUpload}
+              disabled={uploading || !selectedFile}
+              className={`w-full py-2 rounded text-white font-semibold ${
+                uploading || !selectedFile
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-green-700 hover:bg-green-800'
+              }`}
+            >
+              {uploading ? 'Uploading...' : 'Upload Photo'}
+            </button>
+
+            {error && <p className="mt-3 text-red-600 text-sm">{error}</p>}
           </div>
         </div>
       )}
