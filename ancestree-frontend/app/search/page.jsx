@@ -43,7 +43,7 @@ function SearchUsers() {
         country: trimmedCountry,
       });
 
-      const res = await axios.get(`${BACKEND_BASE_URL}/api/user?${params.toString()}`);
+      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
       
       if (res.status === 200) {
         setSearchResults(res.data);

@@ -6,6 +6,6 @@ const upload = multer({ storage });
 const galleryController = require('../controllers/galleryController');
 
 router.post('/upload/:userId', upload.single('file'), galleryController.uploadImage);
-router.get('/user/:userId', galleryController.getUserImages);
+router.get('/user/:userId', galleryController.getImagesByUser);
 
 module.exports = router;

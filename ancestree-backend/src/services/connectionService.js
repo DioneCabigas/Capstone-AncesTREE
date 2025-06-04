@@ -6,7 +6,7 @@ const collection = db.collection('connections');
 
 exports.createConnection = async (requester, receiver) => {
   const connection = new Connection(requester, receiver);
-  const docRef = await collection.add({ ...connection });
+  const docRef = await collection.add(connection.toJSON());
   return docRef.id;
 };
 

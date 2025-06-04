@@ -1,6 +1,6 @@
 const connectionService = require('../services/connectionService');
 
-exports.sendConnectionRequest = async (req, res) => {
+exports.createConnection = async (req, res) => {
   const { requester, receiver } = req.body;
 
   if (!requester || !receiver) {

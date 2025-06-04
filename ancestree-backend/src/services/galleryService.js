@@ -1,9 +1,12 @@
 const admin = require('../config/database');
-const db = admin.firestore();
+const GalleryImage = require('../entities/gallery');
 
-exports.uploadUserImages = async (file, userId) => {
+const db = admin.firestore();
+const bucket = admin.storage().bucket();
+
+exports.uploadImage = async (file, userId) => {
   const fileName = `gallery/${userId}/${Date.now()}_${file.originalname}`;
-  const storageFile = admin.bucket.file(fileName);
+  const storageFile = bucket.file(fileName);
 
   const stream = storageFile.createWriteStream({
     metadata: {
@@ -16,15 +19,16 @@ exports.uploadUserImages = async (file, userId) => {
 
     stream.on('finish', async () => {
       await storageFile.makePublic();
-      const publicUrl = `https://storage.googleapis.com/${admin.bucket.name}/${storageFile.name}`;
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storageFile.name}`;
 
-      await db.collection('galleryImages').add({
+      const imageEntity = new GalleryImage({
         userId,
         imageUrl: publicUrl,
         fileName,
         uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
+      await db.collection('galleryImages').add(imageEntity.toJSON());
       resolve(publicUrl);
     });
 
@@ -32,16 +36,19 @@ exports.uploadUserImages = async (file, userId) => {
   });
 };
 
-exports.getUserImages = async (userId) => {
+exports.getImagesByUser = async (userId) => {
   const snapshot = await db.collection('galleryImages')
     .where('userId', '==', userId)
     .get();
 
-  const images = snapshot.docs.map(doc => doc.data());
+  const images = snapshot.docs.map(doc => {
+    const data = doc.data();
+    return new GalleryImage(data).toJSON();
+  });
 
   images.sort((a, b) => {
-    const timeA = a.uploadedAt ? a.uploadedAt.toMillis() : 0;
-    const timeB = b.uploadedAt ? b.uploadedAt.toMillis() : 0;
+    const timeA = a.uploadedAt?.toMillis?.() || 0;
+    const timeB = b.uploadedAt?.toMillis?.() || 0;
     return timeB - timeA;
   });
 

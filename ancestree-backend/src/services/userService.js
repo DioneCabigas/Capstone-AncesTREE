@@ -1,5 +1,6 @@
 const admin = require('../config/database');
 const User = require('../entities/User');
+const profileService = require('./profileService');
 
 const dbAdmin = admin.firestore();
 const authAdmin = admin.auth();
@@ -8,44 +9,32 @@ exports.createUser = async (uid, data) => {
   const user = new User(data);
   await authAdmin.getUser(uid);
   const userDocRef = dbAdmin.collection('users').doc(uid);
-  await userDocRef.set(user);
+  await userDocRef.set(user.toJSON());
+  await profileService.createOrUpdateProfile(uid, {});
 };
 
 exports.getUser = async (uid) => {
   const doc = await dbAdmin.collection('users').doc(uid).get();
   if (!doc.exists) return null;
-  return doc.data();  
+  const data = doc.data();
+  return new User(data).toJSON();
 };
 
 exports.updateUser = async (uid, updatedData) => {
+  const allowedFields = ['firstName', 'lastName', 'email', 'middleName', 'suffix'];
+  const filtered = {};
+
+  for (const field of allowedFields) {
+    if (field in updatedData) {
+      filtered[field] = updatedData[field];
+    }
+  }
+
   const userDocRef = dbAdmin.collection('users').doc(uid);
-  await userDocRef.update(updatedData);
+  await userDocRef.update(filtered);
 };
 
 exports.deleteUser = async (uid) => {
   const userDocRef = dbAdmin.collection('users').doc(uid);
   await userDocRef.delete();
-};
-
-exports.searchUsers = async (searchTerm = '', city = '', country = '') => {
-  const snapshot = await dbAdmin.collection('users').get();
-  const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-  const searchTokens = searchTerm.toLowerCase().trim().split(' ').filter(Boolean);
-
-  return allUsers.filter(user => {
-    const firstName = user.firstName?.toLowerCase() || '';
-    const lastName = user.lastName?.toLowerCase() || '';
-    const cityAddress = user.cityAddress?.toLowerCase() || '';
-    const countryAddress = user.countryAddress?.toLowerCase() || '';
-
-    const nameMatch = searchTokens.every(token =>
-      firstName.includes(token) || lastName.includes(token)
-    );
-
-    const cityMatch = !city || cityAddress === city.toLowerCase();
-    const countryMatch = !country || countryAddress === country.toLowerCase();
-
-    return nameMatch && cityMatch && countryMatch;
-  });
 };

@@ -6,7 +6,7 @@ const collection = db.collection('familyGroupMembers');
 
 exports.addMember = async (groupId, userId, role, status) => {
   const member = new FamilyGroupMember(groupId, userId, role, status);
-  const docRef = await collection.add({ ...member });
+  const docRef = await collection.add(member.toJSON());
   return docRef.id;
 };
 

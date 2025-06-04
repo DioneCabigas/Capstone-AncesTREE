@@ -1,6 +1,6 @@
-const { uploadImageToStorage, getImagesByUser } = require('../services/galleryService');
+const { uploadImage, getImagesByUser } = require('../services/galleryService');
 
-exports.upoadUserImages = async (req, res) => {
+exports.uploadImage = async (req, res) => {
   try {
     const userId = req.params.userId;
     const file = req.file;
@@ -9,7 +9,7 @@ exports.upoadUserImages = async (req, res) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const imageUrl = await uploadImageToStorage(file, userId);
+    const imageUrl = await uploadImage(file, userId);
     res.status(200).json({ imageUrl });
   } catch (err) {
     console.error(err);
@@ -17,7 +17,7 @@ exports.upoadUserImages = async (req, res) => {
   }
 };
 
-exports.getUserImages = async (req, res) => {
+exports.getImagesByUser = async (req, res) => {
   try {
     const userId = req.params.userId;
     const images = await getImagesByUser(userId);
