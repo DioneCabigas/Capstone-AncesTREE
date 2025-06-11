@@ -2,7 +2,7 @@
 
 import Navbar from '../../components/Navbar';
 import { useState, useEffect, useCallback } from 'react';
-import { User as UserIcon, XCircle, Search as SearchIcon, X as XMark, Loader2 } from 'lucide-react'; // Import Loader2 for a spinner icon
+import { User as UserIcon, X as XMark, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
 function SearchUsers() {
@@ -11,23 +11,20 @@ function SearchUsers() {
   const [countryFilter, setCountryFilter] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // New loading state
+  const [isLoading, setIsLoading] = useState(false);
 
   const BACKEND_BASE_URL = 'http://localhost:3001';
 
-  // Initials as avatar
   const getInitials = (firstName, lastName) => {
     if (!firstName && !lastName) return 'N/A';
     return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
   };
 
-  // API Call for User Search
   const performSearch = useCallback(async (term, city, country) => {
     const trimmedTerm = term.trim();
     const trimmedCity = city.trim();
     const trimmedCountry = country.trim();
 
-    // If all search/filter terms are empty, clear results and stop
     if (!trimmedTerm && !trimmedCity && !trimmedCountry) {
       setSearchResults([]);
       setError('');
@@ -45,11 +42,12 @@ function SearchUsers() {
         city: trimmedCity,
         country: trimmedCountry,
       });
-      
+
       const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
-      
+
       if (res.status === 200) {
-        setSearchResults(res.data);
+        // ⬅️ ACCESS `.results` inside the returned object
+        setSearchResults(res.data.results || []);
       } else {
         throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
       }
@@ -61,7 +59,6 @@ function SearchUsers() {
     }
   }, []);
 
-  // Live search effect with debouncing
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       performSearch(searchTerm, cityFilter, countryFilter);
@@ -70,17 +67,15 @@ function SearchUsers() {
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, cityFilter, countryFilter, performSearch]);
 
-  // Clear All Function
   const handleClearFilters = () => {
     setSearchTerm('');
     setCityFilter('');
     setCountryFilter('');
     setSearchResults([]);
     setError('');
-    setIsLoading(false); // Reset loading state
+    setIsLoading(false);
   };
 
-  // Active Criteria Checker
   const isSearchCriteriaActive = searchTerm.trim() !== '' || cityFilter.trim() !== '' || countryFilter.trim() !== '';
 
   return (
@@ -121,14 +116,12 @@ function SearchUsers() {
           </div>
 
           {error && (
-            <p className="text-red-500 text-center my-4">
-              {error}
-            </p>
+            <p className="text-red-500 text-center my-4">{error}</p>
           )}
 
           <h2 className="text-2xl font-bold mb-4 mt-5 text-[#313131]">Results</h2>
           <div className="min-h-[150px]">
-            {isLoading ? ( // Display loading indicator when loading
+            {isLoading ? (
               <div className="flex justify-center items-center h-full">
                 <Loader2 className="w-8 h-8 animate-spin text-[#4F6F52]" />
                 <p className="ml-2 text-[#808080]">Searching...</p>
