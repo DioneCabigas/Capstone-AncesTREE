@@ -46,10 +46,7 @@ function SearchUsers() {
         country: trimmedCountry,
       });
       
-      const [res] = await Promise.all([
-        axios.get(`${BACKEND_BASE_URL}/api/user?${params.toString()}`),
-        new Promise(resolve => setTimeout(resolve, 300))
-      ]);
+      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
       
       if (res.status === 200) {
         setSearchResults(res.data);

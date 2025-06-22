@@ -29,30 +29,17 @@ function Settings() {
   const [appearInSearch, setAppearInSearch] = useState(false);
   const [exportTree, setExportTree] = useState(false);
 
-  const handleSave = async () => {
+  // Save email and password only
+  const handleAccountSave = async () => {
     try {
       if (!user) return;
       setLoading(true);
 
       const uid = user.uid;
 
-      // const fullName = name.trim().split(' ');
-      // const firstName = fullName.slice(0, -1).join(' ');
-      // const lastName = fullName.slice(-1).join('');
-
-      const res = await axios.post('http://localhost:3001/user', {
+      const res = await axios.post('http://localhost:3001/api/user/', {
         uid,
         email,
-        preferences: {
-          newsletter,
-          familyGroups,
-          connectRequests,
-        },
-        permissions: {
-          allowView,
-          appearInSearch,
-          exportTree,
-        }
       });
 
       if (password) {
@@ -60,11 +47,41 @@ function Settings() {
         console.log("Password updated.");
       }
 
-      console.log('Success:', res.data.message);
+      console.log('Email/Password update success:', res.data.message);
       setIsEditing(false);
       window.location.reload();
     } catch (error) {
-      console.error('Error saving user data:', error.response?.data || error.message);
+      console.error('Error updating email/password:', error.response?.data || error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save notifications and permissions only
+  const handlePrefsSave = async () => {
+    try {
+      if (!user) return;
+      setLoading(true);
+
+      const uid = user.uid;
+
+      const res = await axios.post('http://localhost:3001/api/settings/user', {
+        uid,
+        preferences: {
+          familyGroups,
+          connectRequests,
+          newsletter,
+        },
+        permissions: {
+          allowView,
+          appearInSearch,
+          exportTree,
+        },
+      });
+
+      console.log('Preferences/Permissions update success:', res.data.message);
+    } catch (error) {
+      console.error('Error updating preferences/permissions:', error.response?.data || error.message);
     } finally {
       setLoading(false);
     }
@@ -76,10 +93,9 @@ function Settings() {
 
       try {
         setInitialFetchLoading(true);
-        const res = await axios.get(`http://localhost:3001/user/${loggedUser.uid}`);
+        const res = await axios.get(`http://localhost:3001/api/user/${loggedUser.uid}`);
         const data = res.data;
 
-        // setName(`${data.firstName} ${data.lastName}`);
         setEmail(data.email);
 
         // Set preferences and permissions
@@ -100,13 +116,13 @@ function Settings() {
     return () => unsubscribe();
   }, []);
 
-  // if (initialFetchLoading) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center">
-  //       <LoadingSpinner />
-  //     </div>
-  //   );
-  // }
+  if (initialFetchLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -120,7 +136,7 @@ function Settings() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">Account Information</h2>
               <span className="text-[#4F6F52] cursor-pointer text-sm" onClick={() => setIsEditing((prev) => !prev)}>
-                {isEditing ? <X/> : <Edit/>}
+                {isEditing ? <X /> : <Edit />}
               </span>
             </div>
 
@@ -128,7 +144,7 @@ function Settings() {
               <div>
                 <p className="font-semibold">Email</p>
                 {isEditing ? (
-                  <input type="email" className="border border-[#D9D9D9] px-2 py-1 rounded w-full" value={email} onChange={(e) => setEmail(e.target.value)}/>
+                  <input type="email" className="border border-[#D9D9D9] px-2 py-1 rounded w-full" value={email} onChange={(e) => setEmail(e.target.value)} />
                 ) : (
                   <p>{email || '—'}</p>
                 )}
@@ -138,15 +154,25 @@ function Settings() {
                 {isEditing && (
                   <div>
                     <p className="font-semibold">New Password</p>
-                    <input type="password" className="border border-[#D9D9D9] px-2 py-1 rounded w-full" placeholder="Enter New Password" value={password} onChange={(e) => setPassword(e.target.value)}/>
+                    <input
+                      type="password"
+                      className="border border-[#D9D9D9] px-2 py-1 rounded w-full"
+                      placeholder="Enter New Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
                   </div>
                 )}
               </div>
 
               {isEditing && (
-                <div className="flex justify-end">
-                  <button className="bg-[#4F6F52] text-white px-4 py-2 rounded hover:bg-[#294032]" onClick={handleSave} disabled={loading}>
-                    {loading ? 'Saving...' : 'Save Changes'}
+                <div className="flex justify-end space-x-3">
+                  <button
+                    className="bg-[#4F6F52] text-white px-4 py-2 rounded hover:bg-[#294032]"
+                    onClick={handleAccountSave}
+                    disabled={loading}
+                  >
+                    {loading ? 'Saving...' : 'Save Email/Password'}
                   </button>
                 </div>
               )}
@@ -156,22 +182,28 @@ function Settings() {
             <div className="mt-10">
               <h3 className="text-md font-semibold mb-2">Account Deletion</h3>
               <div className="flex bg-red-100 p-4 rounded-md mb-4 text">
-                <CircleAlert className="text-red-600"/>
-                <p className="pl-5"><span className="font-semibold">Important:</span> Before You Delete Your AncesTREE Account</p>
+                <CircleAlert className="text-red-600" />
+                <p className="pl-5">
+                  <span className="font-semibold">Important:</span> Before You Delete Your AncesTREE Account
+                </p>
               </div>
-              <p className="text-sm text-gray-600 mb-4"> Please be aware that deleting your AncesTREE account will result in the permanent removal of all information you have saved and created. This includes your family tree and all associated data. </p>
-              <p className="text-sm text-gray-600 mb-4"> Once your account is deleted, you will not be able to recover any of your deleted files or information stored within that account. </p>
-              <p className="text-sm text-gray-600 mb-4"> Please carefully consider this before proceeding with account deletion. </p>
-              <button className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"> Delete Account </button>
+              <p className="text-sm text-gray-600 mb-4">
+                Please be aware that deleting your AncesTREE account will result in the permanent removal of all information you have saved and created. This includes your family tree and all associated data.
+              </p>
+              <p className="text-sm text-gray-600 mb-4">
+                Once your account is deleted, you will not be able to recover any of your deleted files or information stored within that account.
+              </p>
+              <p className="text-sm text-gray-600 mb-4">Please carefully consider this before proceeding with account deletion.</p>
+              <button className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Delete Account</button>
             </div>
           </div>
 
-          {/* Email Notifications */}
+          {/* Email Notifications & Permissions */}
           <div>
             <div className="bg-white p-6 rounded-2xl shadow">
               <h2 className="text-xl font-semibold mb-4">Email Notifications</h2>
               {[
-                { label: "Newsletter", desc: "Receive news and updates from AncesTREE", value: newsletter, setter: setNewsletter },
+                // { label: "Newsletter", desc: "Receive news and updates from AncesTREE", value: newsletter, setter: setNewsletter },
                 { label: "Family Groups", desc: "Receive Family Group Invitations", value: familyGroups, setter: setFamilyGroups },
                 { label: "Connect Requests", desc: "Receive Connection Requests from other Users", value: connectRequests, setter: setConnectRequests }
               ].map((item, idx) => (
@@ -194,7 +226,6 @@ function Settings() {
               ))}
             </div>
 
-            {/* Permissions */}
             <div className="bg-white mt-5 p-6 rounded-2xl shadow">
               <h2 className="text-xl font-semibold mb-4">Permissions</h2>
               {[
@@ -210,7 +241,7 @@ function Settings() {
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
-                      className="sr-only peer"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+                      className="sr-only peer"
                       checked={item.value}
                       onChange={(e) => item.setter(e.target.checked)}
                     />
@@ -219,6 +250,17 @@ function Settings() {
                   </label>
                 </div>
               ))}
+            </div>
+
+            {/* Save button for Notifications & Permissions */}
+            <div className="flex justify-end mt-4">
+              <button
+                className="bg-[#4F6F52] text-white px-4 py-2 rounded hover:bg-[#294032]"
+                onClick={handlePrefsSave}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Save Notifications & Permissions'}
+              </button>
             </div>
           </div>
         </div>

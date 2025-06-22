@@ -6,7 +6,7 @@ const collection = db.collection('familyGroups');
 
 exports.createGroup = async (userId, treeId, name, description) => {
   const group = new FamilyGroup(userId, treeId, name, description);
-  const docRef = await collection.add({ ...group });
+  const docRef = await collection.add(group.toJSON());
   return docRef.id;
 };
 
@@ -25,7 +25,6 @@ exports.updateGroupDescription = async (groupId, description) => {
   const docRef = collection.doc(groupId);
   await docRef.update({ description });
 };
-
 
 exports.deleteGroup = async (groupId) => {
   await collection.doc(groupId).delete();

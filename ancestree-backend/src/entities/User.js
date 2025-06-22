@@ -1,21 +1,62 @@
 class User {
   constructor(data) {
-    this.firstName = data.firstName;
-    this.lastName = data.lastName;
-    this.email = data.email;
-    this.middleName = data.middleName || '';
-    this.suffix = data.suffix || '';
-    this.birthDate = data.birthDate || '';
-    this.birthPlace = data.birthPlace || '';
-    this.nationality = data.nationality || '';
-    this.civilStatus = data.civilStatus || '';
-    this.streetAddress = data.streetAddress || '';
-    this.cityAddress = data.cityAddress || '';
-    this.provinceAddress = data.provinceAddress || '';
-    this.countryAddress = data.countryAddress || '';
-    this.zipCode = data.zipCode || '';
-    this.contactNumber = data.contactNumber || '';
-    this.telephoneNumber = data.telephoneNumber || '';
+    this._firstName = data.firstName;
+    this._lastName = data.lastName;
+    this._email = data.email;
+    this._middleName = data.middleName || '';
+    this._suffix = data.suffix || '';
+  }
+
+  // GETTERS
+  get firstName() {
+    return this._firstName;
+  }
+
+  get lastName() {
+    return this._lastName;
+  }
+
+  get email() {
+    return this._email;
+  }
+
+  get middleName() {
+    return this._middleName;
+  }
+
+  get suffix() {
+    return this._suffix;
+  }
+
+  // SETTERS
+  set firstName(value) {
+    this._firstName = value;
+  }
+
+  set lastName(value) {
+    this._lastName = value;
+  }
+
+  set email(value) {
+    this._email = value;
+  }
+
+  set middleName(value) {
+    this._middleName = value;
+  }
+
+  set suffix(value) {
+    this._suffix = value;
+  }
+
+  toJSON() {
+    return {
+      firstName: this.firstName,
+      lastName: this.lastName,
+      email: this.email,
+      middleName: this.middleName,
+      suffix: this.suffix
+    };
   }
 }
 
