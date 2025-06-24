@@ -1,6 +1,7 @@
 const admin = require('../config/database');
 const User = require('../entities/User');
 const profileService = require('./profileService');
+const familyTreeService = require('./familyTreeService');
 
 const dbAdmin = admin.firestore();
 const authAdmin = admin.auth();
@@ -10,7 +11,14 @@ exports.createUser = async (uid, data) => {
   await authAdmin.getUser(uid);
   const userDocRef = dbAdmin.collection('users').doc(uid);
   await userDocRef.set(user.toJSON());
-  await profileService.createOrUpdateProfile(uid, {});
+  await profileService.createProfile(uid, {});
+  
+  const treeName = 'personal-' + uid;
+  const personData = {
+    firstName: data.firstName,
+    lastName: data.lastName,
+  }
+  await familyTreeService.createNewFamilyTree(uid, treeName, personData);
 };
 
 exports.getUser = async (uid) => {

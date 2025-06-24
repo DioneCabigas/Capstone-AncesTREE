@@ -1,5 +1,6 @@
 const familyTreeService = require("../services/familyTreeService");
 
+// Create Family tree only without creating first person in the tree
 exports.createFamilyTree = async (req, res) => {
   try {
     const { userId, treeName } = req.body;
@@ -8,6 +9,21 @@ exports.createFamilyTree = async (req, res) => {
     }
 
     const treeId = await familyTreeService.createFamilyTree(userId, treeName);
+    res.status(201).json({ treeId });
+  } catch (error) {
+    console.error("Error creating family tree:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+exports.createNewFamilyTree = async (req, res) => {
+  try {
+    const { userId, treeName, ...personData } = req.body;
+    if (!userId || !treeName || !personData) {
+      return res.status(400).json({ error: "userId, treeName, and personData are required" });
+    }
+
+    const treeId = await familyTreeService.createNewFamilyTree(userId, treeName, personData);
     res.status(201).json({ treeId });
   } catch (error) {
     console.error("Error creating family tree:", error);

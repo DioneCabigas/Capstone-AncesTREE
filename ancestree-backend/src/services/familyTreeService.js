@@ -1,5 +1,6 @@
 const admin = require("../config/database");
 const FamilyTree = require("../entities/FamilyTree");
+const Person = require("../entities/Person");
 const db = admin.firestore();
 
 const collection = db.collection("familyTrees");
@@ -13,11 +14,17 @@ exports.createFamilyTree = async (userId, treeName) => {
 };
 
 // Creates first person as well
-exports.createNewFamilyTree = async (userId, treeName, person) => {
+exports.createNewFamilyTree = async (userId, treeName, personData) => {
   const familyTree = new FamilyTree(userId, treeName);
   const docRef = await collection.add({ ...familyTree });
-  return docRef.id;
+  const treeId = docRef.id;
+
+  const { firstName, middleName = "", lastName, birthDate = "", birthPlace = "", gender = "", status = "living", relationships = [] } = personData;
+  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships);
+  await personsCollection.doc(userId).set({ ...person });
+  return treeId;
 };
+
 
 exports.getFamilyTreeById = async (treeId) => {
   const doc = await collection.doc(treeId).get();
@@ -85,7 +92,7 @@ exports.getPersonalTree = async (userId) => {
   // Create a query to find the personal tree
   const snapshot = await collection
     .where("userId", "==", userId) // Filter by the user's ID
-    .where("treeName", "==", userId) // Filter where treeName is also the user's ID
+    .where("treeName", "==", "personal-"+userId) // Filter where treeName is also the user's ID
     .where("sharedUsers", "==", []) // Filter where sharedUsers array is empty
     .limit(1) // Assuming there should only be one personal tree per user
     .get();

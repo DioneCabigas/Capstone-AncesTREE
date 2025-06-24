@@ -4,6 +4,8 @@ const familyTreeController = require("../controllers/familyTreeController");
 
 router.post("/", familyTreeController.createFamilyTree);
 
+router.post("/newTree", familyTreeController.createNewFamilyTree);
+
 router.get("/:treeId", familyTreeController.getFamilyTreeById);
 
 router.get("/", familyTreeController.getAllFamilyTrees);
