@@ -6,7 +6,7 @@ export default function PersonNode({ data }) {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
   const toggleActionMenu = (event) => {
-    event.stopPropagation(); // Prevent event from bubbling up to close action menu immediately
+    event.stopPropagation();
     setActionMenuOpen((prev) => !prev);
   };
 
@@ -24,17 +24,16 @@ export default function PersonNode({ data }) {
   const getGenderBackgroundColor = (gender) => {
     switch (gender && gender.toLowerCase()) {
       case "male":
-        return "bg-blue-200"; // Light blue for male background
+        return "bg-blue-200";
       case "female":
-        return "bg-pink-200"; // Light pink for female background
+        return "bg-pink-200";
       default:
-        return "bg-gray-300"; // Default gray background
+        return "bg-gray-300";
     }
   };
 
   return (
     <div className="relative w-36 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      {/* Handle for connections (optional, customize as needed) */}
       <Handle type="target" position="top" className="w-2 h-2 bg-blue-500" />
       <Handle type="source" position="bottom" className="w-2 h-2 bg-blue-500" />
       {/* <Handle type="target" position="left" id="left" className="w-2 h-2 bg-blue-500" />

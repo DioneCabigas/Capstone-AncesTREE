@@ -58,16 +58,14 @@ exports.updatePerson = async (personId, data) => {
     await docRef.update({
       relationships: FieldValue.arrayUnion(...updateData.relationships),
     });
-    // Remove relationships from updateData to prevent it from being overwritten by the general update.
+
     delete updateData.relationships;
   }
 
-  // Perform a general update for all other fields in updateData if there are other fields left
   if (Object.keys(updateData).length > 0) {
     await docRef.update(updateData);
   }
 
-  // Fetch and return updated document
   const updatedDoc = await docRef.get();
 
   return { personId: updatedDoc.id, ...updatedDoc.data() };
@@ -81,10 +79,6 @@ exports.deleteRelationshipFromPerson = async (personId, relationshipToDelete) =>
     return null;
   }
 
-  // Use FieldValue.arrayRemove to remove the specific relationship object
-  // from the 'relationships' array.
-  // IMPORTANT: The `relationshipToDelete` object must be an EXACT match
-  // (deep equality for objects) to an element in the Firestore array.
   await docRef.update({
     relationships: FieldValue.arrayRemove(relationshipToDelete),
   });

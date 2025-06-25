@@ -7,13 +7,11 @@ exports.createPerson = async (req, res) => {
     const treeId = req.params.treeId;
     const personData = req.body;
 
-    // Check if tree exists
     const treeDoc = await familyTreeService.getFamilyTreeById(treeId);
     if (!treeDoc) {
       return res.status(400).json({ message: "Tree doesn't exist" });
     }
 
-    // Check if these fields are present in the request body
     if (!treeId || !personData.firstName || !personData.lastName) {
       return res.status(400).json({ message: "Missing required fields" });
     }

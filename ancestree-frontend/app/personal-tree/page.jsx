@@ -83,40 +83,37 @@ export default function PersonalTree() {
       } else {
         console.log("User logged out.");
         setCurrentUser(null);
-        setCurrentUserId(null); // Clear userId on logout
-        setTreeId(null); // Clear treeId on logout
+        setCurrentUserId(null);
+        setTreeId(null);
         setNodes([]);
         setEdges([]);
         setPeople([]);
       }
     });
 
-    // The cleanup function for useEffect.
-    // This will be called when the component unmounts.
     return () => {
       console.log("Cleaning up auth state listener.");
-      unsubscribe(); // Call the unsubscribe function to stop listening
+      unsubscribe();
     };
-  }, []); // auth is stable, no need to include in dependency array.
+  }, []);
 
   useEffect(() => {
     if (currentUserId && currentUser) {
-      // Ensure both UID and profile data are available
       console.log("Both UID and User Profile are ready. Fetching tree data.");
-      fetchTreeData(currentUserId, currentUser); // Pass uid and profile data
+      fetchTreeData(currentUserId, currentUser);
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
       setNodes([]);
       setEdges([]);
       setPeople([]);
     }
-  }, [currentUserId, currentUser]); // Depends on both states
+  }, [currentUserId, currentUser]);
 
   const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson) => {
     return people.map((person) => ({
       id: person.personId,
       type: "person",
-      position: { x: 0, y: 0 }, // Initial position, will be updated by layout algorithm
+      position: { x: 0, y: 0 },
       data: {
         personId: person.personId,
         firstName: person.firstName,
@@ -126,13 +123,13 @@ export default function PersonalTree() {
         birthDate: person.birthDate,
         birthPlace: person.birthPlace,
         status: person.status,
-        // add fields here for deceased status
+        // fields for deceased?
         relationships: person.relationships.map((rel) => ({
           relatedPersonId: rel.relatedPersonId,
           type: rel.type,
         })),
 
-        // Function needed by the node
+        // Functions
         openSidebar: openSidebar,
         handleDeletePerson: handleDeletePerson,
         handleViewPerson: handleViewPerson,
@@ -158,16 +155,15 @@ export default function PersonalTree() {
 
   const transformPeopleToEdges = (people) => {
     const reactFlowEdges = [];
-    const dagreNodes = new Map(); // To collect all nodes for Dagre, including marriage nodes
-    const dagreEdges = []; // Edges specifically for Dagre layout, might not be rendered
+    const dagreNodes = new Map();
+    const dagreEdges = [];
 
     const getPersonById = (id) => people.find((p) => p.personId === id);
 
-    const addedReactFlowEdges = new Set(); // To prevent duplicate React Flow edges
-    const addedDagreEdges = new Set(); // To prevent duplicate Dagre edges
-    const processedSpousePairs = new Set(); // To ensure each spouse pair creates one marriage node
+    const addedReactFlowEdges = new Set();
+    const addedDagreEdges = new Set();
+    const processedSpousePairs = new Set();
 
-    // Add all actual person nodes to Dagre's node list
     people.forEach((person) => {
       dagreNodes.set(person.personId, { id: person.personId, type: "person" });
     });
@@ -179,7 +175,7 @@ export default function PersonalTree() {
 
         const lowercaseRelType = rel.type.toLowerCase();
 
-        // --- Parent-Child Logic ---
+        // Parent - Child Logic
         let parentId, childId;
         if (lowercaseRelType === "child") {
           parentId = person.personId;
@@ -210,7 +206,7 @@ export default function PersonalTree() {
           }
         }
 
-        // --- Spouse Logic (Horizontal Alignment) ---
+        // Spouse Logic
         else if (lowercaseRelType === "spouse") {
           const [id1, id2] = getSortedSpouseIds(person.personId, rel.relatedPersonId);
           const spouseEdgeKey = `S_${id1}-${id2}`;
@@ -298,7 +294,6 @@ export default function PersonalTree() {
       const personalTreeData = treeResponse.data;
 
       if (personalTreeData && personalTreeData.treeId) {
-        // If a personal tree was found, use its treeId
         treeIdToUse = personalTreeData.treeId;
         setTreeId(treeIdToUse);
         console.log("Existing Personal tree Id found:", treeIdToUse);
@@ -321,13 +316,12 @@ export default function PersonalTree() {
         setPeople(fetchedPeople);
 
         const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson);
-        const { reactFlowEdges, dagreEdges } = transformPeopleToEdges(fetchedPeople); // Get both sets of edges
+        const { reactFlowEdges, dagreEdges } = transformPeopleToEdges(fetchedPeople);
 
-        // Pass both to applyLayout
         const { layoutedNodes, reactFlowEdges: finalReactFlowEdges } = applyLayout(newNodes, { reactFlowEdges, dagreEdges });
 
         setNodes(layoutedNodes);
-        setEdges(finalReactFlowEdges); // Set the edges meant for rendering
+        setEdges(finalReactFlowEdges);
       } else {
         console.error("No treeId available to fetch persons.");
       }
@@ -347,7 +341,7 @@ export default function PersonalTree() {
         firstName: userProfileData?.firstName || "My",
         middleName: userProfileData?.middleName || "",
         lastName: userProfileData?.lastName || "Self",
-        birthDate: userProfileData?.birthDate || "", // Provide a default in YYYY-MM-DD format
+        birthDate: userProfileData?.birthDate || "",
         birthPlace: userProfileData?.birthPlace || "",
         gender: "",
         status: "living",
@@ -379,14 +373,14 @@ export default function PersonalTree() {
   const handleAddPerson = async () => {
     setIsLoading(true);
     if (isEditMode && selectedPersonId) {
-      // EDIT existing person
+      // EDIT
       try {
         await axios.put(`http://localhost:3001/api/persons/${selectedPersonId}`, formData);
         console.log(`Successfully updated person ${selectedPersonId}`, formData);
       } catch (error) {
         console.error("Error updating person:", error);
         alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
-        return; // Stop here if update fails
+        return;
       }
     } else {
       console.log("PersonId:", selectedPersonId);
@@ -411,11 +405,11 @@ export default function PersonalTree() {
           let targetRelationshipType;
 
           if (relationship === "parent") {
-            sourceRelationshipType = "child"; // Selected person is child of new person
-            targetRelationshipType = "parent"; // New person is parent of selected person
+            sourceRelationshipType = "child";
+            targetRelationshipType = "parent";
           } else if (relationship === "child") {
-            sourceRelationshipType = "parent"; // Selected person is parent of new person
-            targetRelationshipType = "child"; // New person is child of selected person
+            sourceRelationshipType = "parent";
+            targetRelationshipType = "child";
           } else if (relationship === "spouse") {
             sourceRelationshipType = "spouse";
             targetRelationshipType = "spouse";
@@ -424,7 +418,6 @@ export default function PersonalTree() {
             return;
           }
 
-          // Update selected person's relationships
           try {
             await axios.put(`http://localhost:3001/api/persons/${selectedPersonId}`, {
               relationships: [
@@ -440,7 +433,6 @@ export default function PersonalTree() {
             return;
           }
 
-          // Update newly created person's relationships (bidirectional)
           try {
             await axios.put(`http://localhost:3001/api/persons/${newPerson.personId}`, {
               relationships: [
@@ -466,15 +458,15 @@ export default function PersonalTree() {
 
     setSidebarOpen(false);
     setFormData({ ...initialFormData });
-    setSelectedPersonId(null); // Clear selected person after operation
-    setIsEditMode(false); // Reset edit mode
+    setSelectedPersonId(null);
+    setIsEditMode(false);
     await fetchTreeData(currentUserId, currentUser);
   };
 
   const openSidebar = (personId) => {
     setSelectedPersonId(personId);
     setSidebarOpen(true);
-    setActionMenuOpen(false); // Close action menu when opening sidebar
+    setActionMenuOpen(false);
     setFormData({ ...initialFormData });
   };
 
@@ -488,7 +480,6 @@ export default function PersonalTree() {
   };
 
   const closeActionMenu = (e) => {
-    // Don't close if clicking on the action buttons themselves
     if (e.target.closest(".action-buttons")) {
       return;
     }
@@ -535,12 +526,9 @@ export default function PersonalTree() {
           </div>
         </ReactFlowProvider>
       </div>
-      {/* Custom Loading Spinner with Inline RGBA Background */}
+      {/* Loading Spinner */}
       {isLoading && (
-        <div
-          className="fixed inset-0 z-45 flex justify-center items-center"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }} // <--- CHANGE THIS LINE
-        >
+        <div className="fixed inset-0 z-45 flex justify-center items-center" style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}>
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
         </div>
       )}
@@ -550,10 +538,6 @@ export default function PersonalTree() {
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeModal}>
           {" "}
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
-            {/* <button onClick={closeModal} className="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
-              <X size={24} />
-            </button> */}
-
             <h2 className="text-2xl font-bold mb-4 text-gray-800">
               {personDetailsInModal.firstName} {personDetailsInModal.middleName && personDetailsInModal.middleName + " "}
               {personDetailsInModal.lastName}
@@ -597,7 +581,7 @@ export default function PersonalTree() {
         </div>
       )}
 
-      {/* Click outside to close action menu - positioned behind action buttons */}
+      {/* May not work? clicking outside of action menu closes menu */}
       {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />}
       {/* Overlay for sidebar */}
       {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}

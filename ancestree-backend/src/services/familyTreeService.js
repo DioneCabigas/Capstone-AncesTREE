@@ -89,19 +89,17 @@ exports.deleteFamilyTree = async (treeId) => {
 };
 
 exports.getPersonalTree = async (userId) => {
-  // Create a query to find the personal tree
   const snapshot = await collection
-    .where("userId", "==", userId) // Filter by the user's ID
-    .where("treeName", "==", "personal-"+userId) // Filter where treeName is also the user's ID
-    .where("sharedUsers", "==", []) // Filter where sharedUsers array is empty
-    .limit(1) // Assuming there should only be one personal tree per user
+    .where("userId", "==", userId) 
+    .where("treeName", "==", "personal-"+userId) 
+    .where("sharedUsers", "==", []) 
+    .limit(1) 
     .get();
 
   if (snapshot.empty) {
-    return null; // No personal tree found
+    return null; 
   }
-
-  // Return the first (and should be only) personal tree found
+  
   const doc = snapshot.docs[0];
   return { treeId: doc.id, ...doc.data() };
 };
