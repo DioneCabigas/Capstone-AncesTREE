@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams} from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Navbar from "@/components/Navbar";
@@ -33,7 +33,7 @@ const initialFormData = {
 export default function PersonalTree() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const externalUid = searchParams.get('uid');
+  const externalUid = searchParams.get("uid");
   const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -94,6 +94,7 @@ export default function PersonalTree() {
         setNodes([]);
         setEdges([]);
         setPeople([]);
+        set;
       }
     });
 
@@ -105,23 +106,24 @@ export default function PersonalTree() {
 
   // FETCH TREE DATA USE EFFECT
   useEffect(() => {
-    
-    if(externalUid) {
-      fetchTreeData(externalUid, currentUser);
+    if (externalUid !== currentUserId) {
+      const isCurrentUsersTreeBool = false;
+      fetchTreeData(externalUid, currentUser, isCurrentUsersTreeBool);
       setIsCurrentUsersTree(false);
     } else if (currentUserId && currentUser) {
+      const isCurrentUsersTreeBool = true;
       console.log("Both UID and User Profile are ready. Fetching tree data.");
       setIsCurrentUsersTree(true);
-      fetchTreeData(currentUserId, currentUser);
+      fetchTreeData(currentUserId, currentUser, isCurrentUsersTreeBool);
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
       setNodes([]);
       setEdges([]);
       setPeople([]);
     }
-  }, [currentUserId, currentUser]);
+  }, [currentUserId, currentUser, externalUid]);
 
-  const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson) => {
+  const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
     return people.map((person) => ({
       id: person.personId,
       type: "person",
@@ -151,7 +153,7 @@ export default function PersonalTree() {
           setIsEditMode(true);
           setSidebarOpen(true);
         },
-        isCurrentUsersTree: isCurrentUsersTree,
+        isCurrentUsersTree: isCurrentUsersTreeBool,
       },
     }));
   };
@@ -293,7 +295,7 @@ export default function PersonalTree() {
   };
 
   // FETCH TREE DATA
-  const fetchTreeData = async (uid, userProfileData) => {
+  const fetchTreeData = async (uid, userProfileData, isCurrentUsersTreeBool) => {
     if (!uid) {
       console.warn("Cannot fetch tree data: UID is null."); //test
       return;
@@ -310,7 +312,7 @@ export default function PersonalTree() {
         treeIdToUse = personalTreeData.treeId;
         setTreeId(treeIdToUse);
         console.log("Existing Personal tree Id found:", treeIdToUse);
-      } 
+      }
       // else {
       //   // CREATE NEW TREE for testing only
       //   console.warn("Personal tree not found for user:", uid, ". Creating a new one...");
@@ -329,7 +331,7 @@ export default function PersonalTree() {
         console.log("People data:", fetchedPeople);
         setPeople(fetchedPeople);
 
-        const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson);
+        const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool);
         const { reactFlowEdges, dagreEdges } = transformPeopleToEdges(fetchedPeople);
 
         const { layoutedNodes, reactFlowEdges: finalReactFlowEdges } = applyLayout(newNodes, { reactFlowEdges, dagreEdges });
@@ -474,7 +476,11 @@ export default function PersonalTree() {
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
-    await fetchTreeData(currentUserId, currentUser);
+    if (!isCurrentUsersTree) {
+      await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
+    } else {
+      await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
+    }
   };
 
   const openSidebar = (personId) => {
@@ -517,7 +523,11 @@ export default function PersonalTree() {
       await axios.delete(`http://localhost:3001/api/persons/${personIdToDelete}`);
       console.log(`Successfully deleted person with ID: ${personIdToDelete}`);
 
-      await fetchTreeData(currentUserId, currentUser);
+      if (!isCurrentUsersTree) {
+        await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
+      } else {
+        await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
+      }
     } catch (error) {
       console.error("Error deleting person:", error.response?.data || error.message);
       alert(`Failed to delete person: ${error.response?.data?.message || error.message}`);
