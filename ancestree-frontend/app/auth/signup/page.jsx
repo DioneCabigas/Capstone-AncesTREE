@@ -44,7 +44,7 @@ function SignupContent() {
         email,
         firstName,
         lastName,
-        middleName,
+        middleName: '',
         suffix: '',
         birthDate: '',
         birthPlace: '',

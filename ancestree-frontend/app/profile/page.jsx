@@ -1098,9 +1098,17 @@ function ProfilePage() {
             )}
 
             {/* View Tree Button */}
-            <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
-              View Tree
-            </button>
+            {currentUser && (profileUser || isOwnProfile) && (
+              <Link href={isOwnProfile
+                ? `/personal-tree?uid=${currentUser.uid}`
+                : `/personal-tree?uid=${profileUser.uid}`
+                }
+              >
+                <button className="px-4 py-2 bg-[#365643] text-white rounded hover:bg-opacity-90 transition-colors inline-flex items-center justify-center">
+                  View Tree
+                </button>
+             </Link>
+            )}
           </div>
         </div>
         
