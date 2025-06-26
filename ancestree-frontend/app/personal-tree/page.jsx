@@ -151,6 +151,7 @@ export default function PersonalTree() {
           setIsEditMode(true);
           setSidebarOpen(true);
         },
+        isCurrentUsersTree: isCurrentUsersTree,
       },
     }));
   };

@@ -40,12 +40,15 @@ export default function PersonNode({ data }) {
       <Handle type="source" position="right" id="right" className="w-2 h-2 bg-blue-500" /> */}
 
       {/* Three dots button */}
-      <button
-        onClick={toggleActionMenu}
-        className={`absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded transition-colors ${actionMenuOpen ? "bg-gray-200" : "hover:bg-gray-100"}`}
-      >
-        <MoreHorizontal className="w-4 h-4 text-gray-600" />
-      </button>
+      { data.isCurrentUsersTree === true && (
+        <button
+          onClick={toggleActionMenu}
+         className={`absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded transition-colors ${actionMenuOpen ? "bg-gray-200" : "hover:bg-gray-100"}`}
+       >
+         <MoreHorizontal className="w-4 h-4 text-gray-600" />
+        </button>
+      )}
+      
 
       {/* User content */}
       <div className="flex flex-col items-center text-center">
