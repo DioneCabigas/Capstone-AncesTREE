@@ -116,7 +116,7 @@ function HomeContent() {
             <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
               <h3 className="text-xl font-semibold text-[#313131] mb-2">Quick Actions</h3>
               <div className="flex flex-col space-y-2">
-                <Link href="/family-tree">
+                <Link href="/personal-tree">
                   <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
                     View Family Tree
                   </button>

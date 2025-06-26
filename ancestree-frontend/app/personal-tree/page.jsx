@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams} from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Navbar from "@/components/Navbar";
@@ -30,6 +31,11 @@ const initialFormData = {
 };
 
 export default function PersonalTree() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const externalUid = searchParams.get('uid');
+  const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -97,9 +103,15 @@ export default function PersonalTree() {
     };
   }, []);
 
+  // FETCH TREE DATA USE EFFECT
   useEffect(() => {
-    if (currentUserId && currentUser) {
+    
+    if(externalUid) {
+      fetchTreeData(externalUid, currentUser);
+      setIsCurrentUsersTree(false);
+    } else if (currentUserId && currentUser) {
       console.log("Both UID and User Profile are ready. Fetching tree data.");
+      setIsCurrentUsersTree(true);
       fetchTreeData(currentUserId, currentUser);
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
@@ -297,16 +309,17 @@ export default function PersonalTree() {
         treeIdToUse = personalTreeData.treeId;
         setTreeId(treeIdToUse);
         console.log("Existing Personal tree Id found:", treeIdToUse);
-      } else {
-        // CREATE NEW TREE
-        console.warn("Personal tree not found for user:", uid, ". Creating a new one...");
-        try {
-          treeIdToUse = await createTree(uid, userProfileData);
-        } catch (createTreeError) {
-          console.error("Failed to create new tree during fetchTreeData: ", createTreeError);
-          return;
-        }
-      }
+      } 
+      // else {
+      //   // CREATE NEW TREE for testing only
+      //   console.warn("Personal tree not found for user:", uid, ". Creating a new one...");
+      //   try {
+      //     treeIdToUse = await createTree(uid, userProfileData);
+      //   } catch (createTreeError) {
+      //     console.error("Failed to create new tree during fetchTreeData: ", createTreeError);
+      //     return;
+      //   }
+      // }
 
       if (treeIdToUse) {
         console.log("Fetching persons for tree ID:", treeIdToUse);
