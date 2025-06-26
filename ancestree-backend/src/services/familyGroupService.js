@@ -1,12 +1,23 @@
 const admin = require('../config/database');
 const FamilyGroup = require('../entities/familyGroup');
 const db = admin.firestore();
+const familyTreeService = require('./familyTreeService');
+const userService = require('./userService');
 
 const collection = db.collection('familyGroups');
 
 exports.createGroup = async (userId, treeId, name, description) => {
-  const group = new FamilyGroup(userId, treeId, name, description);
+  const userData = await userService.getUser(userId);
+  const treeName = "tree-" + name;
+  const personData = {
+    firstName: userData.firstName,
+    lastName: userData.lastName,
+  };
+  const newTreeId = await familyTreeService.createNewFamilyTree(userId, treeName, personData);
+
+  const group = new FamilyGroup(userId, newTreeId, name, description);
   const docRef = await collection.add(group.toJSON());
+
   return docRef.id;
 };
 
