@@ -51,6 +51,8 @@ export default function GroupTree() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
+  const [connections, setConnections] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
 
   const getSortedSpouseIds = (id1, id2) => {
     return id1 < id2 ? [id1, id2] : [id2, id1];
@@ -92,7 +94,6 @@ export default function GroupTree() {
         setNodes([]);
         setEdges([]);
         setPeople([]);
-        set;
       }
     });
 
@@ -109,6 +110,7 @@ export default function GroupTree() {
       console.log("Both UID and User Profile are ready. Fetching tree data.");
       setIsCurrentUsersTree(true);
       fetchTreeData(treeId, isCurrentUsersTreeBool);
+      fetchConnectionsData(currentUserId); //new
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
       setNodes([]);
@@ -116,6 +118,167 @@ export default function GroupTree() {
       setPeople([]);
     }
   }, [currentUserId, currentUser, treeId]);
+
+  const fetchUserDetails = async (uid) => {
+    try {
+      const response = await axios.get(`http://localhost:3001/api/user/${uid}`);
+      if (response.status === 200) {
+        return response.data;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Error fetching user details for ${uid}:`, error);
+      return null;
+    }
+  };
+
+  // FETCH CONNECTIONS
+  const fetchConnectionsData = async (userId) => {
+    try {
+      let connectionsResponse;
+
+      // First attempt - alternative endpoint format
+      try {
+        connectionsResponse = await axios.get(`http://localhost:3001/api/connections/${userId}`);
+      } catch (error) {
+        console.error("Failed to fetch connections data:", error);
+      }
+
+      if (connectionsResponse.status === 200) {
+        // For each connection, get the other user's details
+        const connectionsWithDetails = await Promise.all(
+          connectionsResponse.data.map(async (conn) => {
+            // Use the connectionWith field if available, otherwise determine it
+            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
+
+            const userDetails = await fetchUserDetails(otherUserId);
+
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User",
+              firstName: userDetails ? userDetails.firstName : "",
+              lastName: userDetails ? userDetails.lastName : "",
+              gender: userDetails ? userDetails.gender : "",
+              birthDate: userDetails ? userDetails.birthDate : "",
+              birthPlace: userDetails ? userDetails.birthPlace : "",
+              status: userDetails ? userDetails.status : "living",
+              dateOfDeath: userDetails ? userDetails.dateOfDeath : "",
+              placeOfDeath: userDetails ? userDetails.placeOfDeath : "",
+            };
+          })
+        );
+
+        setConnections(connectionsWithDetails);
+      }
+    } catch (error) {
+      console.error("Error fetching connections data:", error);
+      setError("Failed to load connections. Please check console for details.");
+      setConnections([]);
+    }
+  };
+
+  const performSuggestionsSearch = async (term, city, country) => {
+    const trimmedTerm = term.trim();
+    const trimmedCity = city.trim();
+    const trimmedCountry = country.trim();
+
+    if (!trimmedTerm && !trimmedCity && !trimmedCountry) {
+      return []; // Return empty array if no search criteria
+    }
+
+    try {
+      const params = new URLSearchParams({
+        search: trimmedTerm,
+        city: trimmedCity,
+        country: trimmedCountry,
+      });
+
+      const res = await axios.get(`http://localhost:3001/api/search?${params.toString()}`);
+
+      if (res.status === 200) {
+        return res.data.results || []; // Return the results array
+      } else {
+        throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
+      }
+    } catch (err) {
+      console.error("Error searching for suggestions:", err);
+      return []; // Return empty array on error
+    }
+  };
+
+  // MODIFIED generateSuggestions function
+  const generateSuggestions = async (selectedPersonId, currentPeople) => {
+    let newSuggestions = [];
+
+    // Find the selected person's data
+    const selectedPerson = currentPeople.find((p) => p.personId === selectedPersonId);
+
+    if (!selectedPerson) {
+      console.warn("Selected person not found for generating suggestions.");
+      setSuggestions([]); // Clear suggestions if person not found
+      return;
+    }
+
+    // --- Rule: Suggest People with Same Last Name as the selectedPerson ---
+    if (selectedPerson.lastName) {
+      try {
+        const lastNameToSearch = selectedPerson.lastName;
+        console.log("Generating last name suggestions for:", selectedPerson.firstName, lastNameToSearch);
+
+        const matchingUsers = await performSuggestionsSearch(lastNameToSearch, "", "");
+
+        const filteredMatchingUsers = matchingUsers.filter(
+          (user) =>
+            user.id !== currentUserId && // Exclude the currently logged-in user
+            !(
+              // Exclude the selected person based on their name
+              (
+                user.firstName?.toLowerCase() === selectedPerson.firstName?.toLowerCase() &&
+                (user.middleName?.toLowerCase() || "") === (selectedPerson.middleName?.toLowerCase() || "") &&
+                user.lastName?.toLowerCase() === selectedPerson.lastName?.toLowerCase()
+              )
+            ) &&
+            // Exclude any other person already in the current tree based on first and last name
+            !currentPeople.some(
+              (treePerson) => treePerson.firstName?.toLowerCase() === user.firstName?.toLowerCase() && treePerson.lastName?.toLowerCase() === user.lastName?.toLowerCase()
+              // OPTIONAL IMPROVEMENT: If both 'treePerson' and 'user' have 'birthDate', add it for higher accuracy:
+              // && treePerson.birthDate === user.birthDate
+            )
+        );
+
+        filteredMatchingUsers.forEach((user) => {
+          newSuggestions.push({
+            id: user.id, // Unique ID
+            type: "same_last_name",
+            targetUserId: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            details: `This user shares the last name "${lastNameToSearch}" with ${selectedPerson.firstName}.`,
+            potentialConnection: {
+              // Data structure for handleAddToTree
+              personId: user.id,
+              firstName: user.firstName,
+              middleName: user.middleName || "",
+              lastName: user.lastName,
+              birthDate: user.birthDate || "",
+              birthPlace: user.birthPlace || "",
+              gender: user.gender || "",
+              status: user.status || "living",
+              dateOfDeath: "",
+              placeOfDeath: "",
+            },
+          });
+        });
+      } catch (error) {
+        console.error("Error fetching users by last name for suggestions:", error);
+      }
+    }
+
+    setSuggestions(newSuggestions);
+    console.log("Suggestions: ", suggestions);
+  };
 
   const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
     return people.map((person) => ({
@@ -294,6 +457,9 @@ export default function GroupTree() {
       console.warn("Cannot fetch tree data: UID is null."); //test
       return;
     }
+    console.log("Fetching tree data...");
+    console.log("isCurrentUsersTreeBool: ", isCurrentUsersTreeBool);
+    console.log("isCurrentUsersTree: ", isCurrentUsersTree);
 
     setIsLoading(true);
     let treeIdToUse = treeId;
@@ -349,19 +515,20 @@ export default function GroupTree() {
   };
 
   // Sample data for connections and suggestions
-  const connections = [
-    { id: 1, name: "Jane Doe", timeframe: "year - Present" },
-    { id: 2, name: "Jane Doe", timeframe: "year - Present" },
-    { id: 3, name: "Jane Doe", timeframe: "year - Present" },
-  ];
+  // const connections = [
+  //   { id: 1, name: "Jane Doe", timeframe: "year - Present" },
+  //   { id: 2, name: "Jane Doe", timeframe: "year - Present" },
+  //   { id: 3, name: "Jane Doe", timeframe: "year - Present" },
+  // ];
 
-  const suggestions = [
-    { id: 1, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-    { id: 2, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-    { id: 3, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  ];
+  // const suggestions = [
+  //   { id: 1, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
+  //   { id: 2, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
+  //   { id: 3, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
+  // ];
 
   const handleAddPerson = async () => {
+    event.preventDefault();
     setIsLoading(true);
     if (isEditMode && selectedPersonId) {
       // EDIT
@@ -448,22 +615,34 @@ export default function GroupTree() {
     }
 
     setSidebarOpen(false);
+    setSuggestions([]);
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
     await fetchTreeData(treeId, isCurrentUsersTree);
   };
 
-  const openSidebar = (personId) => {
+  const openSidebar = async (personId) => {
     setSelectedPersonId(personId);
     setSidebarOpen(true);
     setActionMenuOpen(false);
     setFormData({ ...initialFormData });
+
+    if (people.length > 0) {
+      console.log("Sidebar opened for person:", personId, "Generating suggestions...");
+      await generateSuggestions(personId, people); // Pass personId here
+    } else {
+      console.log("Sidebar opened, but data not ready for suggestions.", {
+        peopleCount: people.length,
+      });
+      setSuggestions([]); // Clear suggestions if data isn't ready
+    }
   };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
     setIsEditMode(false);
+    // setSuggestions([]);
   };
 
   const toggleActionMenu = () => {
@@ -477,8 +656,28 @@ export default function GroupTree() {
     setActionMenuOpen(false);
   };
 
-  const handleAddToTree = (person) => {
-    console.log("Adding to tree:", person);
+  const handleAddToTree = (personDetails) => {
+    // Set the form data with the details from the selected connection
+    setFormData({
+      // It's good to explicitly map fields to ensure correct naming for your form
+      relationship: "",
+      firstName: personDetails.firstName || "",
+      middleName: personDetails.middleName || "",
+      lastName: personDetails.lastName || "",
+      birthDate: personDetails.birthDate || "",
+      birthPlace: personDetails.birthPlace || "",
+      gender: personDetails.gender || "",
+      status: personDetails.status || "living",
+      dateOfDeath: "",
+      placeOfDeath: "",
+      // Relationship should probably be reset or chosen manually for the new person relative to existing tree
+    });
+
+    // Switch to the "Add member" tab
+    setActiveTab("Add member");
+
+    // Ensure the form is in 'add' mode, not 'edit' mode, when pre-filling from a connection
+    setIsEditMode(false); // Make sure you have an setIsEditMode state in your parent component
   };
 
   const handleDeletePerson = async (personIdToDelete) => {
@@ -577,18 +776,18 @@ export default function GroupTree() {
       {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}
       {/* Sidebar */}
       <div
-        className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${
+        className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${
           sidebarOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <div className="flex">
+          <div className="flex justify-around">
             {["Add member", "Connections", "Suggestions"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`mx-1 my-1 rounded-sm px-3 py-2 text-xs font-medium transition-colors ${
+                className={`mx-1 my-1 rounded-sm px-3 py-2 text-xs font-medium transition-colors flex-grow ${
                   activeTab === tab ? "text-white" : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
                 }`}
                 style={activeTab === tab ? { backgroundColor: "#365643" } : {}}
@@ -601,222 +800,244 @@ export default function GroupTree() {
 
         {/* Form Content */}
         {activeTab === "Add member" && (
-          <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
-            {/* Relationship */}
-            {!isEditMode && (
-              <>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
-                <div className="flex items-center space-x-6">
-                  {/* Parent*/}
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="relationship" value="parent" checked={formData.relationship === "parent"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "parent" ? "" : "border-gray-300"}`}
-                        style={formData.relationship === "parent" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Parent</span>
-                  </label>
-                  {/* Child */}
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="relationship" value="child" checked={formData.relationship === "child"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "child" ? "" : "border-gray-300"}`}
-                        style={formData.relationship === "child" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Child</span>
-                  </label>
-                  {/* Spouse */}
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="relationship" value="spouse" checked={formData.relationship === "spouse"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "spouse" ? "" : "border-gray-300"}`}
-                        style={formData.relationship === "spouse" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Spouse</span>
-                  </label>
-                </div>
-              </>
-            )}
-            {/* First Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-              <input
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-              />
-            </div>
-
-            {/* Middle Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-              <input
-                type="text"
-                name="middleName"
-                value={formData.middleName}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-              />
-            </div>
-
-            {/* Last Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-              <input
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-              />
-            </div>
-
-            {/* Birth Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Birth Date</label>
-              <input
-                type="date"
-                name="birthDate"
-                value={formData.birthDate}
-                onChange={handleInputChange}
-                placeholder=""
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-              />
-            </div>
-
-            {/* Birth Place */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Birth Place</label>
-              <input
-                type="text"
-                name="birthPlace"
-                value={formData.birthPlace}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-              />
-            </div>
-
-            {/* Gender */}
-            <div>
-              {/* Male Radio */}
-              <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-              <div className="flex items-center space-x-6">
-                <label className="flex items-center">
-                  <div className="relative">
-                    <input type="radio" name="gender" value="male" checked={formData.gender === "male"} onChange={handleInputChange} className="sr-only" />
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 ${formData.gender === "male" ? "" : "border-gray-300"}`}
-                      style={formData.gender === "male" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                    />
+          <form onSubmit={handleAddPerson}>
+            <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
+              {/* Relationship */}
+              {!isEditMode && (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
+                  <div className="flex items-center space-x-6">
+                    {/* Parent*/}
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input
+                          type="radio"
+                          name="relationship"
+                          value="parent"
+                          checked={formData.relationship === "parent"}
+                          onChange={handleInputChange}
+                          className="sr-only"
+                          required={!isEditMode}
+                        />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "parent" ? "" : "border-gray-300"}`}
+                          style={formData.relationship === "parent" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Parent</span>
+                    </label>
+                    {/* Child */}
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="relationship" value="child" checked={formData.relationship === "child"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "child" ? "" : "border-gray-300"}`}
+                          style={formData.relationship === "child" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Child</span>
+                    </label>
+                    {/* Spouse
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="relationship" value="spouse" checked={formData.relationship === "spouse"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "spouse" ? "" : "border-gray-300"}`}
+                          style={formData.relationship === "spouse" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Spouse</span>
+                    </label> */}
                   </div>
-                  <span className="ml-2 text-sm text-gray-700">Male</span>
-                </label>
-                {/* Female Radio */}
-                <label className="flex items-center">
-                  <div className="relative">
-                    <input type="radio" name="gender" value="female" checked={formData.gender === "female"} onChange={handleInputChange} className="sr-only" />
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 ${formData.gender === "female" ? "" : "border-gray-300"}`}
-                      style={formData.gender === "female" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                    />
-                  </div>
-                  <span className="ml-2 text-sm text-gray-700">Female</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Status */}
-            <div>
-              {/* Living radio */}
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <div className="flex items-center space-x-6">
-                <label className="flex items-center">
-                  <div className="relative">
-                    <input type="radio" name="status" value="living" checked={formData.status === "living"} onChange={handleInputChange} className="sr-only" />
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "living" ? "" : "border-gray-300"}`}
-                      style={formData.status === "living" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                    />
-                  </div>
-                  <span className="ml-2 text-sm text-gray-700">Living</span>
-                </label>
-                {/* Deceased Radio */}
-                <label className="flex items-center">
-                  <div className="relative">
-                    <input type="radio" name="status" value="deceased" checked={formData.status === "deceased"} onChange={handleInputChange} className="sr-only" />
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "deceased" ? "" : "border-gray-300"}`}
-                      style={formData.status === "deceased" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                    />
-                  </div>
-                  <span className="ml-2 text-gray-700">Deceased</span>
-                </label>
-              </div>
-            </div>
-
-            {formData.status === "Deceased" && (
+                </>
+              )}
+              {/* First Name */}
               <div>
-                {/* Date of Death */}
-                <div className="pb-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Death</label>
-                  <input
-                    type="date"
-                    name="dateOfDeath"
-                    value={formData.dateOfDeath}
-                    onChange={handleInputChange}
-                    disabled={formData.status === "Living"}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-                {/* Place of Death */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Place of Death</label>
-                  <input
-                    type="text"
-                    name="placeOfDeath"
-                    value={formData.placeOfDeath}
-                    onChange={handleInputChange}
-                    disabled={formData.status === "Living"}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
-                  />
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                  required
+                />
+              </div>
+
+              {/* Middle Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                <input
+                  type="text"
+                  name="middleName"
+                  value={formData.middleName}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                />
+              </div>
+
+              {/* Last Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                  required
+                />
+              </div>
+
+              {/* Birth Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Birth Date</label>
+                <input
+                  type="date"
+                  name="birthDate"
+                  value={formData.birthDate}
+                  onChange={handleInputChange}
+                  placeholder=""
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                />
+              </div>
+
+              {/* Birth Place */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Birth Place</label>
+                <input
+                  type="text"
+                  name="birthPlace"
+                  value={formData.birthPlace}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                />
+              </div>
+
+              {/* Gender */}
+              <div>
+                {/* Male Radio */}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                <div className="flex items-center space-x-6">
+                  <label className="flex items-center">
+                    <div className="relative">
+                      <input type="radio" name="gender" value="male" checked={formData.gender === "male"} onChange={handleInputChange} className="sr-only" />
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 ${formData.gender === "male" ? "" : "border-gray-300"}`}
+                        style={formData.gender === "male" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                      />
+                    </div>
+                    <span className="ml-2 text-sm text-gray-700">Male</span>
+                  </label>
+                  {/* Female Radio */}
+                  <label className="flex items-center">
+                    <div className="relative">
+                      <input type="radio" name="gender" value="female" checked={formData.gender === "female"} onChange={handleInputChange} className="sr-only" />
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 ${formData.gender === "female" ? "" : "border-gray-300"}`}
+                        style={formData.gender === "female" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                      />
+                    </div>
+                    <span className="ml-2 text-sm text-gray-700">Female</span>
+                  </label>
                 </div>
               </div>
-            )}
 
-            {/* Add/Edit Person Button */}
-            <div className="pt-4">
-              <button
-                onClick={handleAddPerson}
-                className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
-                style={{ backgroundColor: "#365643" }}
-              >
-                {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
-              </button>
+              {/* Status */}
+              <div>
+                {/* Living radio */}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                <div className="flex items-center space-x-6">
+                  <label className="flex items-center">
+                    <div className="relative">
+                      <input type="radio" name="status" value="living" checked={formData.status === "living"} onChange={handleInputChange} className="sr-only" />
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "living" ? "" : "border-gray-300"}`}
+                        style={formData.status === "living" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                      />
+                    </div>
+                    <span className="ml-2 text-sm text-gray-700">Living</span>
+                  </label>
+                  {/* Deceased Radio */}
+                  <label className="flex items-center">
+                    <div className="relative">
+                      <input type="radio" name="status" value="deceased" checked={formData.status === "deceased"} onChange={handleInputChange} className="sr-only" />
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "deceased" ? "" : "border-gray-300"}`}
+                        style={formData.status === "deceased" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                      />
+                    </div>
+                    <span className="ml-2 text-gray-700">Deceased</span>
+                  </label>
+                </div>
+              </div>
+
+              {formData.status === "Deceased" && (
+                <div>
+                  {/* Date of Death */}
+                  <div className="pb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Death</label>
+                    <input
+                      type="date"
+                      name="dateOfDeath"
+                      value={formData.dateOfDeath}
+                      onChange={handleInputChange}
+                      disabled={formData.status === "Living"}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  {/* Place of Death */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Place of Death</label>
+                    <input
+                      type="text"
+                      name="placeOfDeath"
+                      value={formData.placeOfDeath}
+                      onChange={handleInputChange}
+                      disabled={formData.status === "Living"}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Add/Edit Person Button */}
+              <div className="pt-4">
+                <button
+                  onClick={handleAddPerson}
+                  className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                  style={{ backgroundColor: "#365643" }}
+                >
+                  {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                  <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          </form>
         )}
 
         {/* Connections Tab */}
         {activeTab === "Connections" && (
           <div className="p-6 space-y-4 overflow-y-auto h-full">
+            <div className="mb-4">
+              {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
+              <p className="text-xs text-gray-600">Your Connections: </p>
+            </div>
             {connections.map((person) => (
-              <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between">
+              <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                  {/* <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
                     <User className="w-5 h-5 text-gray-500" />
+                  </div> */}
+                  <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
+                    <span className="text-[#313131] text-xl font-bold">
+                      {person.firstName ? person.firstName.charAt(0) : ""}
+                      {person.lastName ? person.lastName.charAt(0) : ""}
+                    </span>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                    <p className="text-xs text-gray-500">{person.timeframe}</p>
+                    {/* <p className="text-xs text-gray-500">{person.timeframe}</p> */}
                   </div>
                 </div>
                 <button
@@ -835,20 +1056,24 @@ export default function GroupTree() {
         {activeTab === "Suggestions" && (
           <div className="p-6 space-y-4 overflow-y-auto h-full">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">AI Analysis Suggestion</h3>
-              <p className="text-xs text-gray-600">You might be related to these following people</p>
+              {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
+              <p className="text-xs text-gray-600">You might be related to the following people: </p>
             </div>
 
             {suggestions.map((person) => (
               <div key={person.id} className="space-y-2">
                 <p className="text-xs text-gray-700">
-                  <span className="font-medium">Related to:</span> {person.relatedTo} in your tree
+                  {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
+                  {person.details}
                 </p>
                 <div className="border border-gray-300 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                        <User className="w-5 h-5 text-gray-500" />
+                        <span className="text-[#313131] text-xl font-bold">
+                          {person.firstName ? person.firstName.charAt(0) : ""}
+                          {person.lastName ? person.lastName.charAt(0) : ""}
+                        </span>
                       </div>
                       <div>
                         <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
@@ -856,8 +1081,14 @@ export default function GroupTree() {
                       </div>
                     </div>
                     <div className="flex space-x-2">
-                      <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
-                      <button className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity" style={{ backgroundColor: "#365643" }}>
+                      <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
+                        <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
+                      </a>
+                      <button
+                        onClick={() => handleAddToTree(person.potentialConnection)}
+                        className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
+                        style={{ backgroundColor: "#365643" }}
+                      >
                         Add to Tree
                       </button>
                     </div>
