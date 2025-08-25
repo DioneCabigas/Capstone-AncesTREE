@@ -1,36 +1,40 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const session = require('express-session');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const connectionRoutes = require('./routes/connectionRoutes');
-const familyGroupRoutes = require('./routes/familyGroupRoutes');
-const familyGroupMembersRoutes = require('./routes/familyGroupMembersRoutes');
-const galleryRoutes = require('./routes/galleryRoutes');
-const settingsRoutes = require('./routes/settingsRoutes');
-const searchRoutes = require('./routes/searchRoutes');
-const profileRoutes = require('./routes/profileRoutes');
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const session = require("express-session");
+const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+const connectionRoutes = require("./routes/connectionRoutes");
+const familyGroupRoutes = require("./routes/familyGroupRoutes");
+const familyGroupMembersRoutes = require("./routes/familyGroupMembersRoutes");
+const familyTreeRoutes = require("./routes/familyTreeRoutes");
+const personRoutes = require("./routes/personRoutes");
+const galleryRoutes = require("./routes/galleryRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
+const searchRoutes = require("./routes/searchRoutes");
+const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(bodyParser.json());
 // app.use(express.json()); // Ignore this. Need to test for something
 
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/connections', connectionRoutes);
-app.use('/api/family-groups', familyGroupRoutes);
-app.use('/api/family-group-members', familyGroupMembersRoutes);
-app.use('/api/gallery', galleryRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/profile', profileRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/connections", connectionRoutes);
+app.use("/api/family-groups", familyGroupRoutes);
+app.use("/api/family-group-members", familyGroupMembersRoutes);
+app.use("/api/family-trees", familyTreeRoutes);
+app.use("/api/persons", personRoutes);
+app.use("/api/gallery", galleryRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/profile", profileRoutes);
 
 // For testing purposes (Ignore lng ni ninyo)
-const testRoutes = require('../tests/routes/testRoutes');
+const testRoutes = require("../tests/routes/testRoutes");
 app.use("/test", testRoutes);
 // ----------------------------------------------------------
 

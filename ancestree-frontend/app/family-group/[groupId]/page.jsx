@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
@@ -243,9 +244,11 @@ function ViewGroupPage() {
         
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
-          <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">
-            View Tree
-          </button>
+          <Link href={`/group-tree?treeId=${group.treeId}`}>
+            <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">
+              View Tree
+            </button>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

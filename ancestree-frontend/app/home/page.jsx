@@ -25,6 +25,7 @@ import Link from 'next/link';
  */
 function HomeContent() {
   const [user, setUser] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [verificationMessage, setVerificationMessage] = useState("");
 
   useEffect(() => {
@@ -57,6 +58,7 @@ function HomeContent() {
           
           // Store authenticated user in state
           setUser(authUser);
+          setUserId(authUser.uid);
         } else {
           // User exists but email is not verified
           setUser(null);
@@ -116,7 +118,7 @@ function HomeContent() {
             <div className="bg-[rgba(79,111,82,0.1)] p-4 rounded-md">
               <h3 className="text-xl font-semibold text-[#313131] mb-2">Quick Actions</h3>
               <div className="flex flex-col space-y-2">
-                <Link href="/family-tree">
+                <Link href={`/personal-tree?uid=${userId}`}>
                   <button className="bg-[#4F6F52] text-white px-4 py-2 rounded w-full hover:bg-opacity-90">
                     View Family Tree
                   </button>
