@@ -5,11 +5,12 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Navbar from "@/components/Navbar";
 import React, { useState, useEffect } from "react";
-import { MoreHorizontal, Plus, User, Edit3, UserPlus, X } from "lucide-react";
+import { MoreHorizontal, Plus, User, Edit3, UserPlus, X, Users, Bell } from "lucide-react";
 import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow } from "reactflow";
 import dagre from "dagre";
 import "reactflow/dist/style.css";
 import PersonNode from "@/components/PersonNode";
+import MergeRequestsModal from "@/components/MergeRequestsModal";
 import axios from "axios";
 
 const nodeTypes = {
@@ -42,6 +43,12 @@ export default function GroupTree() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("Add member");
+  const [groupData, setGroupData] = useState(null);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [mergeRequests, setMergeRequests] = useState([]);
+  const [showMergeRequestsModal, setShowMergeRequestsModal] = useState(false);
+  const [pendingMergeRequestsCount, setPendingMergeRequestsCount] = useState(0);
   const [formData, setFormData] = useState({ ...initialFormData });
   const [isValid, setIsValid] = useState(false);
   const [people, setPeople] = useState([]);
@@ -51,7 +58,6 @@ export default function GroupTree() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
-  const [connections, setConnections] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
 
   const getSortedSpouseIds = (id1, id2) => {
@@ -110,7 +116,7 @@ export default function GroupTree() {
       console.log("Both UID and User Profile are ready. Fetching tree data.");
       setIsCurrentUsersTree(true);
       fetchTreeData(treeId, isCurrentUsersTreeBool);
-      fetchConnectionsData(currentUserId); //new
+      fetchGroupDataAndMembers(treeId);
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
       setNodes([]);
@@ -118,6 +124,13 @@ export default function GroupTree() {
       setPeople([]);
     }
   }, [currentUserId, currentUser, treeId]);
+
+  // Fetch merge requests when group data and user role are available
+  useEffect(() => {
+    if (groupData && currentUserRole === 'Owner') {
+      fetchPendingMergeRequests(groupData.id);
+    }
+  }, [groupData, currentUserRole]);
 
   const fetchUserDetails = async (uid) => {
     try {
@@ -133,48 +146,55 @@ export default function GroupTree() {
   };
 
   // FETCH CONNECTIONS
-  const fetchConnectionsData = async (userId) => {
+  // Fetch group data and members
+  const fetchGroupDataAndMembers = async (treeId) => {
     try {
-      let connectionsResponse;
+      // Get group by tree ID
+      const groupResponse = await axios.get(`http://localhost:3001/api/family-groups/tree/${treeId}`);
+      if (groupResponse.status === 200) {
+        const group = groupResponse.data;
+        setGroupData(group);
 
-      // First attempt - alternative endpoint format
-      try {
-        connectionsResponse = await axios.get(`http://localhost:3001/api/connections/${userId}`);
-      } catch (error) {
-        console.error("Failed to fetch connections data:", error);
-      }
-
-      if (connectionsResponse.status === 200) {
-        // For each connection, get the other user's details
-        const connectionsWithDetails = await Promise.all(
-          connectionsResponse.data.map(async (conn) => {
-            // Use the connectionWith field if available, otherwise determine it
-            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
-
-            const userDetails = await fetchUserDetails(otherUserId);
-
-            return {
-              ...conn,
-              otherUserId,
-              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User",
-              firstName: userDetails ? userDetails.firstName : "",
-              lastName: userDetails ? userDetails.lastName : "",
-              gender: userDetails ? userDetails.gender : "",
-              birthDate: userDetails ? userDetails.birthDate : "",
-              birthPlace: userDetails ? userDetails.birthPlace : "",
-              status: userDetails ? userDetails.status : "living",
-              dateOfDeath: userDetails ? userDetails.dateOfDeath : "",
-              placeOfDeath: userDetails ? userDetails.placeOfDeath : "",
-            };
-          })
-        );
-
-        setConnections(connectionsWithDetails);
+        // Fetch group members
+        const membersResponse = await axios.get(`http://localhost:3001/api/family-group-members/group/${group.id}`);
+        if (membersResponse.status === 200) {
+          // For each member, fetch their user details
+          const membersWithDetails = await Promise.all(
+            membersResponse.data.map(async (member) => {
+              try {
+                const userResponse = await axios.get(`http://localhost:3001/api/user/${member.userId}`);
+                return { ...member, userDetails: userResponse.data };
+              } catch (userErr) {
+                console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
+                return { ...member, userDetails: null };
+              }
+            })
+          );
+          setGroupMembers(membersWithDetails);
+          
+          // Find current user's role
+          const currentMember = membersWithDetails.find(member => member.userId === currentUserId);
+          setCurrentUserRole(currentMember?.role || null);
+        }
       }
     } catch (error) {
-      console.error("Error fetching connections data:", error);
-      setError("Failed to load connections. Please check console for details.");
-      setConnections([]);
+      console.error("Error fetching group data and members:", error);
+      setGroupMembers([]);
+    }
+  };
+
+  // Fetch pending merge requests for owners
+  const fetchPendingMergeRequests = async (groupId) => {
+    try {
+      const response = await axios.get(`http://localhost:3001/api/merge-requests/group/${groupId}/pending`);
+      if (response.status === 200) {
+        setMergeRequests(response.data);
+        setPendingMergeRequestsCount(response.data.length);
+      }
+    } catch (error) {
+      console.error("Error fetching merge requests:", error);
+      setMergeRequests([]);
+      setPendingMergeRequestsCount(0);
     }
   };
 
@@ -701,6 +721,51 @@ export default function GroupTree() {
     }
   };
 
+  // Handle merge request creation
+  const handleRequestMerge = async () => {
+    if (!groupData || !currentUserId) {
+      alert('Unable to create merge request. Missing group or user information.');
+      return;
+    }
+
+    try {
+      const owner = groupMembers.find(member => member.role === 'Owner');
+      if (!owner) {
+        alert('Unable to find group owner.');
+        return;
+      }
+
+      await axios.post('http://localhost:3001/api/merge-requests', {
+        groupId: groupData.id,
+        requesterId: currentUserId,
+        targetUserId: owner.userId
+      });
+
+      alert('Merge request sent successfully!');
+    } catch (error) {
+      console.error('Error creating merge request:', error);
+      if (error.response?.data?.message?.includes('already exists')) {
+        alert('You have already requested a merge for this group.');
+      } else {
+        alert('Failed to send merge request. Please try again.');
+      }
+    }
+  };
+
+  // Handle opening merge requests modal
+  const handleShowMergeRequests = () => {
+    setShowMergeRequestsModal(true);
+  };
+
+  // Handle when merge requests are processed
+  const handleMergeRequestProcessed = () => {
+    if (groupData) {
+      fetchPendingMergeRequests(groupData.id);
+    }
+    setShowMergeRequestsModal(false);
+  };
+
+
   return (
     <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
       <Navbar />
@@ -783,7 +848,7 @@ export default function GroupTree() {
         {/* Tabs */}
         <div className="border-b border-gray-200">
           <div className="flex justify-around">
-            {["Add member", "Connections", "Suggestions"].map((tab) => (
+            {["Add member", "Members", "Suggestions"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1016,37 +1081,60 @@ export default function GroupTree() {
           </form>
         )}
 
-        {/* Connections Tab */}
-        {activeTab === "Connections" && (
+        {/* Members Tab */}
+        {activeTab === "Members" && (
           <div className="p-6 space-y-4 overflow-y-auto h-full">
+            {/* Request Merge / Merge Requests Button */}
+            {currentUserRole && (
+              <div className="mb-4">
+                {currentUserRole === 'Owner' ? (
+                  <button
+                    onClick={handleShowMergeRequests}
+                    className="w-full text-white py-2.5 px-4 rounded-md hover:bg-blue-600 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: "#3b82f6" }}
+                  >
+                    <Bell className="w-4 h-4" />
+                    <span>Merge Requests ({pendingMergeRequestsCount})</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleRequestMerge}
+                    className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-600 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: "#10b981" }}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Request Merge</span>
+                  </button>
+                )}
+              </div>
+            )}
+            
             <div className="mb-4">
-              {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
-              <p className="text-xs text-gray-600">Your Connections: </p>
+              <p className="text-xs text-gray-600">Group Members ({groupMembers.length})</p>
             </div>
-            {connections.map((person) => (
-              <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
+            
+            {groupMembers.map((member) => (
+              <div key={member.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
                 <div className="flex items-center space-x-3">
-                  {/* <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-gray-500" />
-                  </div> */}
                   <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
                     <span className="text-[#313131] text-xl font-bold">
-                      {person.firstName ? person.firstName.charAt(0) : ""}
-                      {person.lastName ? person.lastName.charAt(0) : ""}
+                      {member.userDetails?.firstName ? member.userDetails.firstName.charAt(0) : ""}
+                      {member.userDetails?.lastName ? member.userDetails.lastName.charAt(0) : ""}
                     </span>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                    {/* <p className="text-xs text-gray-500">{person.timeframe}</p> */}
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-gray-800">
+                      {member.userDetails 
+                        ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}`.trim()
+                        : 'Unknown User'
+                      }
+                    </h4>
+                    <p className="text-xs text-gray-500">{member.role}</p>
+                    <p className="text-xs text-gray-400">
+                      Status: {member.status}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleAddToTree(person)}
-                  className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                  style={{ backgroundColor: "#365643" }}
-                >
-                  Add to Tree
-                </button>
               </div>
             ))}
           </div>
@@ -1099,6 +1187,16 @@ export default function GroupTree() {
           </div>
         )}
       </div>
+      
+      {/* Merge Requests Modal */}
+      <MergeRequestsModal
+        isOpen={showMergeRequestsModal}
+        onClose={() => setShowMergeRequestsModal(false)}
+        groupId={groupData?.id}
+        mergeRequests={mergeRequests}
+        onRequestHandled={handleMergeRequestProcessed}
+        currentUserId={currentUserId}
+      />
     </div>
   );
 }

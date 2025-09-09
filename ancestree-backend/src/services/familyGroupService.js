@@ -1,5 +1,5 @@
 const admin = require('../config/database');
-const FamilyGroup = require('../entities/familyGroup');
+const FamilyGroup = require('../entities/FamilyGroup');
 const db = admin.firestore();
 const familyTreeService = require('./familyTreeService');
 const userService = require('./userService');
@@ -28,8 +28,35 @@ exports.getGroupById = async (groupId) => {
 };
 
 exports.getGroupsByUser = async (userId) => {
-  const snapshot = await collection.where('userId', '==', userId).get();
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  // Get groups created by the user
+  const createdGroupsSnapshot = await collection.where('userId', '==', userId).get();
+  const createdGroups = createdGroupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  
+  // Get groups where the user is a member
+  const memberCollection = db.collection('familyGroupMembers');
+  const membershipSnapshot = await memberCollection.where('userId', '==', userId).get();
+  
+  const memberGroupIds = membershipSnapshot.docs.map(doc => doc.data().groupId);
+  
+  // Get the full group data for groups where user is a member
+  const memberGroups = [];
+  for (const groupId of memberGroupIds) {
+    try {
+      const groupDoc = await collection.doc(groupId).get();
+      if (groupDoc.exists) {
+        const groupData = { id: groupDoc.id, ...groupDoc.data() };
+        // Only add if not already in createdGroups
+        if (!createdGroups.some(group => group.id === groupData.id)) {
+          memberGroups.push(groupData);
+        }
+      }
+    } catch (error) {
+      console.warn(`Could not fetch group ${groupId}:`, error);
+    }
+  }
+  
+  // Combine and return all groups (created + member of)
+  return [...createdGroups, ...memberGroups];
 };
 
 exports.updateGroupDescription = async (groupId, description) => {
@@ -39,4 +66,13 @@ exports.updateGroupDescription = async (groupId, description) => {
 
 exports.deleteGroup = async (groupId) => {
   await collection.doc(groupId).delete();
+};
+
+exports.getGroupByTreeId = async (treeId) => {
+  const snapshot = await collection.where('treeId', '==', treeId).get();
+  if (snapshot.empty) {
+    return null;
+  }
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
 };

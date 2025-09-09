@@ -59,13 +59,28 @@ exports.updateGroupDescription = async (req, res) => {
 
 
 exports.deleteGroup = async (req, res) => {
-  const { id } = req.params;
+  const { groupId } = req.params;
 
   try {
-    await familyGroupService.deleteGroup(id);
+    await familyGroupService.deleteGroup(groupId);
     res.status(200).json({ message: 'Group deleted.' });
   } catch (error) {
     console.error('Error deleting group:', error);
     res.status(500).json({ message: 'Failed to delete group.' });
+  }
+};
+
+exports.getGroupByTreeId = async (req, res) => {
+  const { treeId } = req.params;
+
+  try {
+    const group = await familyGroupService.getGroupByTreeId(treeId);
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found for this tree.' });
+    }
+    res.status(200).json(group);
+  } catch (error) {
+    console.error('Error retrieving group by tree ID:', error);
+    res.status(500).json({ message: 'Failed to retrieve group.' });
   }
 };

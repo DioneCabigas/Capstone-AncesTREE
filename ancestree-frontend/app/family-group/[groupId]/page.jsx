@@ -192,6 +192,27 @@ function ViewGroupPage() {
   // Get existing member IDs to pass to the invite modal for filtering
   const existingMemberIds = members.map(member => member.userId);
 
+  // Function to handle member removal
+  const handleRemoveMemberClick = async (member) => {
+    const memberName = member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}` : 'Unknown User';
+    
+    if (window.confirm(`Are you sure you want to remove ${memberName} from this group?`)) {
+      try {
+        const response = await axios.delete(`${BACKEND_BASE_URL}${API_FAMILY_GROUP_MEMBERS_PATH}/${member.id}`);
+        
+        if (response.status === 200) {
+          // Refresh the member list
+          await fetchGroupAndMembers();
+        } else {
+          throw new Error(`Failed to remove member: ${response.statusText}`);
+        }
+      } catch (err) {
+        console.error("Error removing member:", err);
+        setError(err.response?.data?.message || "Failed to remove member. Please try again.");
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">

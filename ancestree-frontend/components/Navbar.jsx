@@ -155,6 +155,7 @@ export default function Navbar() {
     };
   }, []);
 
+
   /**
    * Enhanced real-time notification fetching with smart duplicate prevention
    */
@@ -200,6 +201,29 @@ export default function Navbar() {
           });
         }
       }
+
+      // Fetch group invitations sent to the current user
+      const groupInvitesRes = await axios.get(`/api/group-invitation/user/${userId}`);
+      const groupInvites = groupInvitesRes.data || [];
+
+      for (const invite of groupInvites) {
+        const senderDetails = await fetchUserDetails(invite.senderId);
+        const senderName = senderDetails
+          ? `${senderDetails.firstName} ${senderDetails.lastName}`
+          : 'Someone';
+
+        notificationList.push({
+          id: `invite_${invite.id}`, // Unique ID
+          type: 'group_invite',
+          message: `${senderName} invited you to join a family group.`,
+          timestamp: invite.createdAt || new Date().toISOString(),
+          fromUserId: invite.senderId,
+          fromUserName: senderName,
+          invitationId: invite.id,
+          isRead: false
+        });
+      }
+
       
       // Check for recently updated connections (accepted/rejected)
       const now = new Date();
@@ -335,6 +359,26 @@ export default function Navbar() {
       }
     }
   };
+
+  const handleGroupInviteResponse = async (invitationId, action) => {
+    try {
+      await axios.post(`/api/group-invitation/${invitationId}/${action}`);
+      
+      // Optimistically update UI
+      setNotifications(prev => prev.filter(n => n.invitationId !== invitationId));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      // Optional: refetch updated list
+      if (user) {
+        fetchNotifications(user.uid);
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} group invitation:`, error);
+      alert(`Failed to ${action} group invitation.`);
+    }
+  };
+
+
 
   /**
    * Enhanced mark as read with immediate update
@@ -529,7 +573,7 @@ export default function Navbar() {
                                   {formatTimestamp(notification.timestamp)}
                                 </p>
                                 
-                                {/* Action buttons for connection requests */}
+                                {/* Action buttons for connection or group invite requests */}
                                 {notification.type === 'connection_request' && (
                                   <div className="flex space-x-2">
                                     <button
@@ -552,6 +596,30 @@ export default function Navbar() {
                                     </button>
                                   </div>
                                 )}
+
+                                {notification.type === 'group_invite' && (
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleGroupInviteResponse(notification.invitationId, 'accept');
+                                      }}
+                                      className="px-3 py-1 bg-[#4F6F52] text-white text-xs rounded hover:bg-opacity-90 transition-colors"
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleGroupInviteResponse(notification.invitationId, 'reject');
+                                      }}
+                                      className="px-3 py-1 border border-gray-300 text-[#313131] text-xs rounded hover:bg-gray-50 transition-colors"
+                                    >
+                                      Decline
+                                    </button>
+                                  </div>
+                                )}
+
                               </div>
                               
                               {/* Unread indicator */}

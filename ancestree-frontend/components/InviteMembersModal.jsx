@@ -32,7 +32,6 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
   const performSearch = useCallback(async (term) => {
     const trimmedTerm = term.trim();
 
-    // If search is empty, clear results and stop
     if (!trimmedTerm) {
       setSearchResults([]);
       setError('');
@@ -47,11 +46,13 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
         search: trimmedTerm,
       });
 
-      const res = await axios.get(`${BACKEND_BASE_URL}/api/user?${params.toString()}`);
-      
+      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
+
       if (res.status === 200) {
-        // Filter out existing members and the current user from search results
-        const filteredResults = res.data.filter(user => 
+        // Use .results as in the search page
+        const results = res.data.results || [];
+        // Filter out existing members and the current user
+        const filteredResults = results.filter(user =>
           !existingMembers.includes(user.id) && user.id !== currentUserId
         );
         setSearchResults(filteredResults);
@@ -77,31 +78,30 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
   
   // Handles inviting existing users from search results
   const handleInviteUser = async (userId, userName) => {
-    console.log("Attempting to invite existing user:", userName);
-    console.log("  groupId (from prop):", groupId);
-    console.log("  userId (from selected user):", userId);
+  console.log("Inviting user:", userName);
+  try {
+    const response = await axios.post(`${BACKEND_BASE_URL}/api/group-invitation`, {
+      groupId: groupId,
+      senderId: currentUserId,
+      receiverId: userId,
+    });
 
-    try {
-      const response = await axios.post(`${BACKEND_BASE_URL}/api/family-group-members`, {
-        groupId: groupId,
-        userId: userId,
-        role: 'Member' // Default role
-      });
-
-      if (response.status === 200) { // Backend returns 200 OK for successful addition
-        showNotification(`Successfully invited ${userName}!`, 'success');
-        onInviteSuccess();
-        // Remove the invited user from search results
-        setSearchResults(prevResults => prevResults.filter(user => user.id !== userId));
-      } else {
-        showNotification(response.data?.message || 'Failed to send invitation.', 'error');
-        throw new Error(response.data?.message || 'Failed to send invitation.');
-      }
-    } catch (err) {
-      console.error('Error inviting user:', err);
-      showNotification(err.response?.data?.message || `Failed to invite ${userName}.`, 'error');
+    if (response.status === 200) {
+      showNotification(`Invitation sent to ${userName}.`, 'success');
+      onInviteSuccess();
+      // Remove invited user from results
+      setSearchResults(prev => prev.filter(user => user.id !== userId));
+    } else {
+      showNotification(response.data?.message || 'Failed to send invitation.', 'error');
     }
-  };
+  } catch (err) {
+    console.error('Error sending invitation:', err);
+    showNotification(
+      err.response?.data?.message || `Failed to invite ${userName}.`,
+      'error'
+    );
+  }
+};
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -188,7 +188,7 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
                       </div>
                     </div>
                     <button
-                    //   onClick={() => handleInviteUser(user.id, `${user.firstName} ${user.lastName}`)}
+                      onClick={() => handleInviteUser(user.id, `${user.firstName} ${user.lastName}`)}
                       className="bg-[#365643] text-white hover:bg-[#4F6F52] px-4 py-1.5 rounded-md text-sm font-medium flex-shrink-0"
                     >
                       Invite
