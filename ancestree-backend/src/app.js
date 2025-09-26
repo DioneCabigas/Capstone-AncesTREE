@@ -13,6 +13,8 @@ const galleryRoutes = require("./routes/galleryRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const searchRoutes = require("./routes/searchRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+const familyGroupInvitation = require("./routes/familyGroupInvitationRoutes");
+const mergeRequestRoutes = require("./routes/mergeRequestRoutes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -32,6 +34,8 @@ app.use("/api/gallery", galleryRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/group-invitation", familyGroupInvitation);
+app.use("/api/merge-requests", mergeRequestRoutes);
 
 // For testing purposes (Ignore lng ni ninyo)
 const testRoutes = require("../tests/routes/testRoutes");
