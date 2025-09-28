@@ -71,7 +71,12 @@ function ProfilePage() {
 
         try {
           // Load the target user's profile using the server API
-          const response = await axios.get(`/api/user/${targetUserId}`);
+          // Pass requesting user ID for privacy checking
+          const url = isOwn 
+            ? `/api/user/${targetUserId}` 
+            : `/api/user/${targetUserId}?requestingUserId=${currentUser.uid}`;
+            
+          const response = await axios.get(url);
 
           if (response.status === 200) {
             const data = response.data;
@@ -1237,10 +1242,27 @@ function ProfilePage() {
               
               {/* If viewing another user's profile, show a notice */}
               {!isOwnProfile && (
-                <div className="mb-6 p-4 bg-[rgba(79,111,82,0.1)] rounded-md">
-                  <p className="text-[#313131]">
-                    You are viewing {userData.firstName}'s profile.
-                  </p>
+                <div className="mb-6">
+                  <div className="p-4 bg-[rgba(79,111,82,0.1)] rounded-md mb-4">
+                    <p className="text-[#313131]">
+                      You are viewing {userData.firstName}'s profile.
+                    </p>
+                  </div>
+                  
+                  {/* Show privacy restriction notice if applicable */}
+                  {userData._restricted && (
+                    <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <p className="text-yellow-800">
+                        <strong>Limited View:</strong> This user has restricted access to their profile information. 
+                        Only basic information is visible.
+                      </p>
+                      {userData._error && (
+                        <p className="text-yellow-600 text-sm mt-1">
+                          Note: {userData._error}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               

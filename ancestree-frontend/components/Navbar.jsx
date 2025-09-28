@@ -494,9 +494,9 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <Link href="/" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Home</Link>
-              <Link href="/about" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">About</Link>
-              <Link href="/features" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Features</Link>
+              <Link href="/#home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Home</Link>
+              <Link href="/#about" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">About</Link>
+              <Link href="/#features" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Features</Link>
             </>
           )}
         </div>

@@ -28,9 +28,10 @@ exports.updateProfile = async (req, res) => {
 
 exports.getProfile = async (req, res) => {
   const uid = req.params.userId;
+  const requestingUserId = req.query.requestingUserId || null; // Optional parameter
 
   try {
-    const profile = await profileService.getProfileWithUser(uid);
+    const profile = await profileService.getProfileWithUser(uid, requestingUserId);
     res.status(200).json(profile);
   } catch (error) {
     console.error(error);

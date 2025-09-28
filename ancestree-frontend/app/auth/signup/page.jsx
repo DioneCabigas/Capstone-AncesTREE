@@ -4,7 +4,7 @@ import Navbar from '../../../components/Navbar';
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { auth } from '@/app/utils/firebase';
-import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, deleteUser } from 'firebase/auth';
 import AuthController from '@/components/AuthController';
 import Link from "next/link";
 
@@ -71,6 +71,22 @@ function SignupContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        
+        // Cleanup: Delete the Firebase Auth user if backend registration fails
+        try {
+          await deleteUser(user);
+          console.log('Firebase Auth user deleted due to backend registration failure');
+        } catch (deleteError) {
+          console.error('Failed to delete Firebase Auth user:', deleteError);
+          // If we can't delete the user, provide additional context in the error message
+          setError(
+            (errorData.message || 'Failed to complete registration.') + 
+            ' Please contact support if you cannot register again with the same email.'
+          );
+          setIsSubmitting(false);
+          return;
+        }
+        
         setError(errorData.message || 'Failed to complete registration.');
         setIsSubmitting(false);
         return;
