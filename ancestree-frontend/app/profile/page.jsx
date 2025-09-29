@@ -5,7 +5,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
-import Navbar from '../../components/Navbar';
+import Layout from '../../components/Layout';
 import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
 import axios from 'axios';
 
@@ -1041,9 +1041,8 @@ function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white"> {/* 60% white */}
-      {/* Using the updated Navbar component */}
-      <Navbar />
+    <Layout>
+      <div className="min-h-screen bg-white"> {/* 60% white */}
       
       {/* Main Content - Add appropriate top padding to account for navbar */}
       <div className="container mx-auto pt-20 px-4 pb-12">
@@ -1282,7 +1281,8 @@ function ProfilePage() {
           renderConnectionsContent()
         )}
       </div>
-    </div>
+      </div>
+    </Layout>
   );
 }
 

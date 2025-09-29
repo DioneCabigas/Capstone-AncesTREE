@@ -18,13 +18,13 @@ import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { Bell, X } from "lucide-react";
 import axios from 'axios';
+import SearchBar from './SearchBar';
 
 axios.defaults.baseURL = 'http://localhost:3001';
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState({ firstName: "" });
-  const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -32,7 +32,6 @@ export default function Navbar() {
   const [lastNotificationCheck, setLastNotificationCheck] = useState(new Date());
   const [shownBrowserNotifications, setShownBrowserNotifications] = useState(new Set());
   
-  const menuRef = useRef(null);
   const notificationRef = useRef(null);
   const router = useRouter();
 
@@ -138,12 +137,9 @@ export default function Navbar() {
     };
   }, []);
 
-  // Handle clicks outside dropdowns to close them
+  // Handle clicks outside notifications dropdown to close it
   useEffect(() => {
     function handleClickOutside(event) {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setMenuOpen(false);
-      }
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
         setNotificationsOpen(false);
       }
@@ -414,19 +410,6 @@ export default function Navbar() {
     // Optionally, you could add an API call here to mark all as read/dismissed
   };
 
-  /**
-   * Handle user logout
-   */
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setMenuOpen(false);
-      setNotificationsOpen(false);
-      router.push("/");
-    } catch (error) {
-      console.error("Error signing out: ", error);
-    }
-  };
 
   /**
    * Format timestamp for display
@@ -447,62 +430,32 @@ export default function Navbar() {
     return notificationTime.toLocaleDateString();
   };
 
-  // Get the first initial for the avatar
-  const getInitial = () => {
-    if (userData.firstName) {
-      return userData.firstName.charAt(0).toUpperCase();
-    }
-    if (user && user.displayName) {
-      return user.displayName.charAt(0).toUpperCase();
-    }
-    if (user && user.email) {
-      return user.email.charAt(0).toUpperCase();
-    }
-    return "U";
-  };
-
-  // Get the display name for the profile
-  const getDisplayName = () => {
-    if (userData.firstName) {
-      return userData.firstName;
-    }
-    if (user && user.displayName) {
-      return user.displayName.split(' ')[0];
-    }
-    return "User";
-  };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-[#FFFFFF] text-sm text-[#313131] p-2 z-50 border-b-2 border-[#313131]">
-      <div className="container mx-auto grid grid-cols-3 items-center">
-        {/* Logo and Brand */}
-        <div className="flex items-center space-x-2">
+    <nav className="fixed top-0 left-0 right-0 bg-[#FFFFFF] text-sm text-[#313131] p-2 z-[60] border-b-2 border-gray-200 h-15">
+      <div className="w-full flex items-center">
+        {/* Left side - Logo */}
+        <div className="flex items-center space-x-2 flex-shrink-0">
           <Link href={user ? "/home" : "/"} className="flex items-center">
             <Image src="/images/AncesTree_Logo.png" alt="Logo" width={135} height={40}/>
           </Link>
-        </div> 
+        </div>
 
-        {/* Navigation Links */}
-        <div className="hidden md:flex justify-center space-x-6">
+        {/* Center - Navigation Links for non-authenticated users, Search for authenticated */}
+        <div className="flex-1 flex justify-center px-4">
           {user ? (
-            <>
-              <Link href="/home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Home</Link>
-              <Link href="/search" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Search</Link>              
-              <Link href={`/personal-tree?uid=${user.uid}`} className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)] whitespace-nowrap">Family Tree</Link>
-              <Link href="/family-group" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)] whitespace-nowrap">Family Group</Link>
-              <Link href="/gallery" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors hover:bg-[rgba(49,49,49,0.2)]">Gallery</Link>
-            </>
+            <SearchBar />
           ) : (
-            <>
+            <div className="hidden md:flex space-x-6">
               <Link href="/#home" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Home</Link>
               <Link href="/#about" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">About</Link>
               <Link href="/#features" className="hover:underline decoration-2 underline-offset-4 px-2 py-1 rounded transition-colors">Features</Link>
-            </>
+            </div>
           )}
         </div>
 
         {/* Right side - Notifications and User Menu */}
-        <div className="flex justify-end items-center space-x-4">
+        <div className="flex items-center space-x-4 flex-shrink-0">
           {user && (
             <>
               {/* Notifications Bell */}
@@ -521,7 +474,7 @@ export default function Navbar() {
 
                 {/* Notifications Dropdown */}
                 {notificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-[#4F6F52] z-50 max-h-96 overflow-hidden">
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-[#4F6F52] z-[70] max-h-96 overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-[#313131]">Notifications</h3>
@@ -635,52 +588,6 @@ export default function Navbar() {
                 )}
               </div>
 
-              {/* User Menu */}
-              <div className="relative" ref={menuRef}>
-                <button
-                  onClick={() => setMenuOpen(!menuOpen)}
-                  className="flex items-center space-x-2 px-3 py-1.5 rounded-md hover:bg-[rgba(49,49,49,0.2)] transition-colors"
-                >
-                  <div className="h-8 w-8 rounded-full bg-white text-[#313131] flex items-center justify-center font-bold">
-                    {getInitial()}
-                  </div>
-                  <span className="hidden md:inline-block">
-                    {getDisplayName()}
-                  </span>
-                  
-                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-
-                {/* User Dropdown Menu */}
-                {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-[#4F6F52]">
-                    <Link href="/profile">
-                      <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
-                        Profile
-                      </div>
-                    </Link>
-                    <Link href="/settings">
-                      <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
-                        Settings
-                      </div>
-                    </Link>
-                    <Link href="/help">
-                      <div onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-[#313131] hover:bg-[rgba(79,111,82,0.1)]">
-                        Help
-                      </div>
-                    </Link>
-                    <div className="border-t border-[#4F6F52] my-1"></div>
-                    <div
-                      onClick={handleLogout}
-                      className="block px-4 py-2 text-sm text-red-600 hover:bg-[rgba(239,68,68,0.1)] cursor-pointer"
-                    >
-                      Logout
-                    </div>
-                  </div>
-                )}
-              </div>
             </>
           )}
 

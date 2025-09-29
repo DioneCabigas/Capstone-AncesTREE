@@ -3,8 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
-import Navbar from "@/components/Navbar";
-import React, { useState, useEffect } from "react";
+import Layout from '@/components/Layout';
+import AuthController from '@/components/AuthController';
+import React, { useState, useEffect } from 'react';
 import { MoreHorizontal, Plus, User, Edit3, UserPlus, X } from "lucide-react";
 import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow } from "reactflow";
 import dagre from "dagre";
@@ -30,7 +31,7 @@ const initialFormData = {
   placeOfDeath: "",
 };
 
-export default function PersonalTree() {
+function PersonalTree() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const externalUid = searchParams.get("uid");
@@ -737,84 +738,84 @@ export default function PersonalTree() {
   };
 
   return (
-    <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
-      <Navbar />
-      {/* Main Tree Area */}
-      <div className="flex items-center justify-center" style={{ height: "calc(100vh - 64px)" }}>
-        <ReactFlowProvider>
-          <div style={{ width: "100%", height: "100%" }}>
-            <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
-              <Background />
-              <Controls />
-            </ReactFlow>
-          </div>
-        </ReactFlowProvider>
-      </div>
-      {/* Loading Spinner */}
-      {isLoading && (
-        <div className="fixed inset-0 z-45 flex justify-center items-center" style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}>
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
-        </div>
-      )}
-
-      {/* Person Details Modal */}
-      {isModalOpen && personDetailsInModal && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeModal}>
-          {" "}
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-2xl font-bold mb-4 text-gray-800">
-              {personDetailsInModal.firstName} {personDetailsInModal.middleName && personDetailsInModal.middleName + " "}
-              {personDetailsInModal.lastName}
-            </h2>
-
-            <div className="space-y-2 text-gray-700">
-              <p>
-                <strong>Gender:</strong> {personDetailsInModal.gender}
-              </p>
-              {personDetailsInModal.birthDate && (
-                <p>
-                  <strong>Birth Date:</strong> {personDetailsInModal.birthDate}
-                </p>
-              )}
-              {personDetailsInModal.birthPlace && (
-                <p>
-                  <strong>Birth Place:</strong> {personDetailsInModal.birthPlace}
-                </p>
-              )}
-              <p>
-                <strong>Status:</strong> {personDetailsInModal.status}
-              </p>
-              {personDetailsInModal.status === "deceased" && personDetailsInModal.dateOfDeath && (
-                <p>
-                  <strong>Date of Death:</strong> {personDetailsInModal.dateOfDeath}
-                </p>
-              )}
-              {personDetailsInModal.status === "deceased" && personDetailsInModal.placeOfDeath && (
-                <p>
-                  <strong>Place of Death:</strong> {personDetailsInModal.placeOfDeath}
-                </p>
-              )}
+    <Layout>
+      <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
+        {/* Main Tree Area */}
+        <div className="flex items-center justify-center" style={{ height: "calc(100vh - 64px)" }}>
+          <ReactFlowProvider>
+            <div style={{ width: "100%", height: "100%" }}>
+              <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
+                <Background />
+                <Controls />
+              </ReactFlow>
             </div>
+          </ReactFlowProvider>
+        </div>
+        {/* Loading Spinner */}
+        {isLoading && (
+          <div className="fixed inset-0 z-45 flex justify-center items-center" style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
+          </div>
+        )}
 
-            <div className="mt-6 flex justify-end">
-              <button onClick={closeModal} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
-                Close
-              </button>
+        {/* Person Details Modal */}
+        {isModalOpen && personDetailsInModal && (
+          <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeModal}>
+            {" "}
+            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">
+                {personDetailsInModal.firstName} {personDetailsInModal.middleName && personDetailsInModal.middleName + " "}
+                {personDetailsInModal.lastName}
+              </h2>
+
+              <div className="space-y-2 text-gray-700">
+                <p>
+                  <strong>Gender:</strong> {personDetailsInModal.gender}
+                </p>
+                {personDetailsInModal.birthDate && (
+                  <p>
+                    <strong>Birth Date:</strong> {personDetailsInModal.birthDate}
+                  </p>
+                )}
+                {personDetailsInModal.birthPlace && (
+                  <p>
+                    <strong>Birth Place:</strong> {personDetailsInModal.birthPlace}
+                  </p>
+                )}
+                <p>
+                  <strong>Status:</strong> {personDetailsInModal.status}
+                </p>
+                {personDetailsInModal.status === "deceased" && personDetailsInModal.dateOfDeath && (
+                  <p>
+                    <strong>Date of Death:</strong> {personDetailsInModal.dateOfDeath}
+                  </p>
+                )}
+                {personDetailsInModal.status === "deceased" && personDetailsInModal.placeOfDeath && (
+                  <p>
+                    <strong>Place of Death:</strong> {personDetailsInModal.placeOfDeath}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button onClick={closeModal} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* May not work? clicking outside of action menu closes menu */}
-      {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />}
-      {/* Overlay for sidebar */}
-      {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}
-      {/* Sidebar */}
-      <div
-        className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full"
-        }`}
-      >
+        {/* May not work? clicking outside of action menu closes menu */}
+        {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />}
+        {/* Overlay for sidebar */}
+        {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}
+        {/* Sidebar */}
+        <div
+          className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${
+            sidebarOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
         {/* Tabs */}
         <div className="border-b border-gray-200">
           <div className="flex justify-around">
@@ -1130,7 +1131,19 @@ export default function PersonalTree() {
             ))}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }
+
+// Wrap with AuthController to ensure only authenticated users can access
+function PersonalTreeWithAuth() {
+  return (
+    <AuthController mode="PROTECT">
+      <PersonalTree />
+    </AuthController>
+  );
+}
+
+export default PersonalTreeWithAuth;

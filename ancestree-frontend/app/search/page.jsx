@@ -1,6 +1,7 @@
 'use client'
 
-import Navbar from '../../components/Navbar';
+import Layout from '../../components/Layout';
+import AuthController from '@/components/AuthController';
 import { useState, useEffect, useCallback } from 'react';
 import { User as UserIcon, X as XMark, Loader2 } from 'lucide-react';
 import axios from 'axios';
@@ -79,9 +80,9 @@ function SearchUsers() {
   const isSearchCriteriaActive = searchTerm.trim() !== '' || cityFilter.trim() !== '' || countryFilter.trim() !== '';
 
   return (
-    <div className="min-h-screen bg-[#F4F4F4]">
-      <Navbar />
-      <div className="max-w-4xl mx-auto px-4 py-10">
+    <Layout>
+      <div className="min-h-screen bg-[#F4F4F4]">
+        <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="bg-white mt-18 rounded-lg p-8 md:p-12 mb-10 shadow-md">
           <h2 className="text-2xl font-bold mb-6 text-[#313131]">User Search</h2>
 
@@ -165,9 +166,19 @@ function SearchUsers() {
             )}
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }
 
-export default SearchUsers;
+// Wrap with AuthController to ensure only authenticated users can access
+function SearchUsersWithAuth() {
+  return (
+    <AuthController mode="PROTECT">
+      <SearchUsers />
+    </AuthController>
+  );
+}
+
+export default SearchUsersWithAuth;

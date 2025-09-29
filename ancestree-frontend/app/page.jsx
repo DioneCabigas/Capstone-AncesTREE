@@ -1,6 +1,6 @@
 'use client'
 
-import Navbar from '../components/Navbar';
+import Layout from '../components/Layout';
 import Link from 'next/link';
 import AuthController from '../components/AuthController';
 
@@ -12,8 +12,8 @@ import AuthController from '../components/AuthController';
  */
 function LandingContent() {
   return (
-    <div className="relative bg-dark-green min-h-screen">
-      <Navbar />
+    <Layout>
+      <div className="relative bg-dark-green min-h-screen">
 
       {/* Hero Section */}
       <section id="home" className="relative z-10 flex flex-col items-center justify-center text-[var(--light-yellow)] h-[calc(100vh-60px)] md:h-[calc(100vh-72px)] text-center">
@@ -157,7 +157,8 @@ function LandingContent() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </Layout>
   );
 }
 

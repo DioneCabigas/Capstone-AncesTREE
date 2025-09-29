@@ -1,6 +1,6 @@
 'use client';
 
-import Navbar from "@/components/Navbar";
+import Layout from "@/components/Layout";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { CircleAlert, Edit, X } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -24,15 +24,13 @@ function Settings() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Email Notifications
-  const [newsletter, setNewsletter] = useState(false);
-  const [familyGroups, setFamilyGroups] = useState(false);
-  const [connectRequests, setConnectRequests] = useState(false);
+  // Notifications
+  const [familyGroups, setFamilyGroups] = useState(true);
+  const [connectRequests, setConnectRequests] = useState(true);
 
   // Permissions
-  const [allowView, setAllowView] = useState(false);
-  const [appearInSearch, setAppearInSearch] = useState(false);
-  const [exportTree, setExportTree] = useState(false);
+  const [allowView, setAllowView] = useState(true);
+  const [appearInSearch, setAppearInSearch] = useState(true);
 
   // Save email and password only
   const handleAccountSave = async () => {
@@ -81,12 +79,10 @@ function Settings() {
         preferences: {
           familyGroups,
           connectRequests,
-          newsletter,
         },
         permissions: {
           allowView,
           appearInSearch,
-          exportTree,
         },
       });
 
@@ -212,8 +208,8 @@ function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <Layout>
+      <div className="min-h-screen bg-gray-50">
       <div className="max-w-5xl mx-auto pt-20">
         <h1 className="text-3xl font-bold mb-6">Settings</h1>
         
@@ -409,7 +405,8 @@ function Settings() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </Layout>
   );
 }
 

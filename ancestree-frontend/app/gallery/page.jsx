@@ -2,7 +2,8 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import Navbar from '../../components/Navbar'; // Import the shared Navbar component
+import Layout from '../../components/Layout';
+import AuthController from '@/components/AuthController';
 
 const MAX_PHOTOS = 20;
 const MAX_SIZE_MB = 10;
@@ -75,11 +76,10 @@ const Gallery = () => {
     setUploading(false);
   };
 
-  return ( // Gi change nako ni nga section kay wla naka Tailwind tanan [Dione]
-    <div className="min-h-screen bg-gray-100">
-      <Navbar />
-
-      <div className="max-w-6xl mx-auto px-6 py-12 pt-24">
+  return (
+    <Layout>
+      <div className="min-h-screen bg-gray-100">
+        <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-bold text-black">Gallery</h2>
           <button
@@ -149,8 +149,18 @@ const Gallery = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </Layout>
   );
 };
 
-export default Gallery; 
+// Wrap with AuthController to ensure only authenticated users can access
+function GalleryWithAuth() {
+  return (
+    <AuthController mode="PROTECT">
+      <Gallery />
+    </AuthController>
+  );
+}
+
+export default GalleryWithAuth;
