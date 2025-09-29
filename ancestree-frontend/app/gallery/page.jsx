@@ -78,8 +78,7 @@ const Gallery = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-100">
-        <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto pt-16">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-bold text-black">Gallery</h2>
           <button
@@ -149,7 +148,6 @@ const Gallery = () => {
           </div>
         </div>
       )}
-      </div>
     </Layout>
   );
 };

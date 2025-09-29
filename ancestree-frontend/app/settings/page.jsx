@@ -167,25 +167,21 @@ function Settings() {
           const settingsData = settingsRes.data;
           
           // Set preferences and permissions from settings API
-          setNewsletter(settingsData.preferences?.newsletter || false);
           setFamilyGroups(settingsData.preferences?.familyGroups || false);
           setConnectRequests(settingsData.preferences?.connectRequests || false);
           
           setAllowView(settingsData.permissions?.allowView || false);
           setAppearInSearch(settingsData.permissions?.appearInSearch || false);
-          setExportTree(settingsData.permissions?.exportTree || false);
           
         } catch (settingsErr) {
           // If settings don't exist yet, use defaults (first time setup)
           console.log('No settings found, using defaults:', settingsErr.response?.status === 404 ? 'User settings not initialized' : settingsErr.message);
           
           // Set default values
-          setNewsletter(false);
-          setFamilyGroups(false);
-          setConnectRequests(false);
-          setAllowView(false);
-          setAppearInSearch(false);
-          setExportTree(false);
+          setFamilyGroups(true);
+          setConnectRequests(true);
+          setAllowView(true);
+          setAppearInSearch(true);
         }
         
       } catch (err) {
@@ -209,8 +205,7 @@ function Settings() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto pt-20">
+      <div className="max-w-5xl mx-auto pt-16">
         <h1 className="text-3xl font-bold mb-6">Settings</h1>
         
         {/* Success Message */}
@@ -336,7 +331,6 @@ function Settings() {
             <div className="bg-white p-6 rounded-2xl shadow">
               <h2 className="text-xl font-semibold mb-4">Notifications</h2>
               {[
-                // { label: "Newsletter", desc: "Receive news and updates from AncesTREE", value: newsletter, setter: setNewsletter },
                 { label: "Family Groups", desc: "Receive Family Group Invitations", value: familyGroups, setter: setFamilyGroups },
                 { label: "Connect Requests", desc: "Receive Connection Requests from other Users", value: connectRequests, setter: setConnectRequests }
               ].map((item, idx) => (
@@ -364,7 +358,6 @@ function Settings() {
               {[
                 { label: "Allow other users to view my information", desc: "Decide if other AncesTREE members can see your basic profile details", value: allowView, setter: setAllowView },
                 { label: "Appear in public search results", desc: "Control whether your profile can be found by other users", value: appearInSearch, setter: setAppearInSearch },
-                // { label: "Export my family tree data", desc: "Enable the option to download your family tree", value: exportTree, setter: setExportTree }
               ].map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between mb-4">
                   <div>
@@ -404,7 +397,6 @@ function Settings() {
             </div>
           </div>
         </div>
-      </div>
       </div>
     </Layout>
   );
