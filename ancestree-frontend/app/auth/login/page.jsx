@@ -125,7 +125,7 @@ function LoginContent() {
             </div>
  
             <div className="text-right text-sm mb-6 pb-5">
-              <a href="#" className="text-[#365643] hover:underline">Forgot Password?</a>
+              <a href="/auth/forgot-password" className="text-[#365643] hover:underline">Forgot Password?</a>
             </div>
  
             <button
