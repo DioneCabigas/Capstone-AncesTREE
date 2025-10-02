@@ -97,6 +97,7 @@ exports.getPersonalTree = async (req, res) => {
       return res.status(200).json({ message: "Personal family tree not found for this user." });
     }
 
+
     res.status(200).json(personalTree);
   } catch (error) {
     console.error("Error getting personal tree:", error);

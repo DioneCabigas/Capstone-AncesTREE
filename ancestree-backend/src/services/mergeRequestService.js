@@ -22,6 +22,14 @@ exports.createMergeRequest = async (groupId, requesterId, targetUserId) => {
   return docRef.id;
 };
 
+exports.getMergeRequestById = async (requestId) => {
+  const doc = await collection.doc(requestId).get();
+  if (!doc.exists) {
+    return null;
+  }
+  return { id: doc.id, ...doc.data() };
+};
+
 exports.getMergeRequestsByGroup = async (groupId) => {
   const snapshot = await collection.where('groupId', '==', groupId).get();
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

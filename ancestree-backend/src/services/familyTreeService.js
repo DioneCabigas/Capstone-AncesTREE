@@ -21,7 +21,10 @@ exports.createNewFamilyTree = async (userId, treeName, personData) => {
 
   const { firstName, middleName = "", lastName, birthDate = "", birthPlace = "", gender = "", status = "living", relationships = [] } = personData;
   const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships);
+  
+  // Always use userId as person document ID for the tree creator
   await personsCollection.doc(userId).set({ ...person });
+  
   return treeId;
 };
 

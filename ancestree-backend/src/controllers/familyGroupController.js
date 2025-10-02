@@ -41,7 +41,7 @@ exports.getGroupsByUser = async (req, res) => {
 };
 
 exports.updateGroupDescription = async (req, res) => {
-  const { groupId } = req.params;
+  const { id } = req.params;  // Changed from groupId to id to match route
   const { description } = req.body;
 
   if (!description) {
@@ -49,7 +49,7 @@ exports.updateGroupDescription = async (req, res) => {
   }
 
   try {
-    await familyGroupService.updateGroupDescription(groupId, description);
+    await familyGroupService.updateGroupDescription(id, description);
     res.status(200).json({ message: 'Group description updated.' });
   } catch (error) {
     console.error('Error updating group description:', error);
@@ -59,10 +59,10 @@ exports.updateGroupDescription = async (req, res) => {
 
 
 exports.deleteGroup = async (req, res) => {
-  const { groupId } = req.params;
+  const { id } = req.params;  // Changed from groupId to id to match route
 
   try {
-    await familyGroupService.deleteGroup(groupId);
+    await familyGroupService.deleteGroup(id);
     res.status(200).json({ message: 'Group deleted.' });
   } catch (error) {
     console.error('Error deleting group:', error);

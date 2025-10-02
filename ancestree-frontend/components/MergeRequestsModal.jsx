@@ -9,14 +9,27 @@ const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequest
 
   const handleApprove = async (requestId) => {
     try {
-      await axios.patch(`http://localhost:3001/api/merge-requests/${requestId}/status`, {
+      const response = await axios.patch(`http://localhost:3001/api/merge-requests/${requestId}/status`, {
         status: 'approved',
         reviewedBy: currentUserId
       });
+      
+      // Show success message with merge details if available
+      if (response.data.mergeResult) {
+        const { mergedPersons } = response.data.mergeResult;
+        alert(`Merge request approved successfully! ${mergedPersons} person(s) were added to the group tree.`);
+      } else {
+        alert('Merge request approved successfully!');
+      }
+      
       onRequestHandled();
     } catch (error) {
       console.error('Error approving merge request:', error);
-      alert('Failed to approve merge request');
+      if (error.response?.data?.error) {
+        alert(`Failed to approve merge request: ${error.response.data.error}`);
+      } else {
+        alert('Failed to approve merge request');
+      }
     }
   };
 

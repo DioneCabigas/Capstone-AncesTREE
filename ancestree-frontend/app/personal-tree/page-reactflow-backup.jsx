@@ -5,68 +5,44 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Layout from '@/components/Layout';
 import AuthController from '@/components/AuthController';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MoreHorizontal, Plus, User, Edit3, UserPlus, X, ToggleLeft, ToggleRight } from "lucide-react";
-import FamilyTree from "@balkangraph/familytree.js";
+import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow, Handle } from "reactflow";
+import dagre from "dagre";
+import "reactflow/dist/style.css";
+import PersonNode from "@/components/PersonNode";
 import axios from "axios";
 
-// Convert people data to FamilyTreeJS format
-const convertToFamilyTreeData = (people) => {
-  const familyTreeData = [];
+// Marriage junction component - invisible connection point
+const MarriageJunctionNode = ({ data }) => {
+  // Only show horizontal junctions as small visible squares
+  const isVisible = data?.isHorizontalJunction;
   
-  people.forEach(person => {
-    const node = {
-      id: person.personId,
-      
-      // Primary display name (bold on card)
-      name: `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unknown Person',
-      
-      // All individual field mappings for editing
-      firstName: person.firstName || '',
-      middleName: person.middleName || '',
-      lastName: person.lastName || '',
-      gender: person.gender || 'male',
-      birthDate: person.birthDate || '',
-      birthPlace: person.birthPlace || '',
-      status: person.status || 'living',
-      dateOfDeath: person.dateOfDeath || '',
-      placeOfDeath: person.placeOfDeath || '',
-      
-      // Display photo - ensure we have a proper URL or create default avatar
-      img: person.photo || person.profilePhoto || person.image || 
-           `https://ui-avatars.com/api/?name=${encodeURIComponent((person.firstName || '') + ' ' + (person.lastName || ''))}&size=60&background=4F6F52&color=ffffff&rounded=true`,
-      
-      // Family relationships
-      pids: [], // Partner IDs
-      fid: null, // Father ID
-      mid: null, // Mother ID
-      
-      // Tags for template selection
-      tags: [person.gender || 'male']
-    };
-    
-    // Set parent relationships
-    person.relationships?.forEach(rel => {
-      if (rel.type.toLowerCase() === 'parent') {
-        // Find the parent and determine if it's father or mother
-        const parent = people.find(p => p.personId === rel.relatedPersonId);
-        if (parent) {
-          if (parent.gender === 'male') {
-            node.fid = rel.relatedPersonId;
-          } else {
-            node.mid = rel.relatedPersonId;
-          }
-        }
-      } else if (rel.type.toLowerCase() === 'spouse') {
-        node.pids.push(rel.relatedPersonId);
-      }
-    });
-    
-    familyTreeData.push(node);
-  });
-  
-  console.log('Converted FamilyTreeJS data with all fields:', familyTreeData);
-  return familyTreeData;
+  return (
+    <div 
+      className={`w-1 relative`} 
+      style={{ 
+        opacity: isVisible ? 1 : 0, 
+        height: '2px',
+        backgroundColor: isVisible ? '#4F6F52' : 'transparent'
+      }}
+    >
+      {/* All handles positioned at edges of the square for proper connections */}
+      <Handle type="target" position="top" id="top" className="opacity-0" style={{ top: 0 }} />
+      <Handle type="source" position="top" id="top" className="opacity-0" style={{ top: 0 }} />
+      <Handle type="target" position="bottom" id="bottom" className="opacity-0" style={{ bottom: 0 }} />
+      <Handle type="source" position="bottom" id="bottom" className="opacity-0" style={{ bottom: 0 }} />
+      <Handle type="target" position="left" id="left" className="opacity-0" style={{ left: 0 }} />
+      <Handle type="source" position="left" id="left" className="opacity-0" style={{ left: 0 }} />
+      <Handle type="target" position="right" id="right" className="opacity-0" style={{ right: 0 }} />
+      <Handle type="source" position="right" id="right" className="opacity-0" style={{ right: 0 }} />
+    </div>
+  );
+};
+
+const nodeTypes = {
+  person: PersonNode,
+  marriage: MarriageJunctionNode,
 };
 
 const initialFormData = {
@@ -87,42 +63,6 @@ function PersonalTree() {
   const searchParams = useSearchParams();
   const externalUid = searchParams.get("uid");
   const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
-  
-  // Add axios interceptor for better error debugging
-  useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        console.log('Making API request:', config.method?.toUpperCase(), config.url);
-        return config;
-      },
-      (error) => {
-        console.error('Request error:', error);
-        return Promise.reject(error);
-      }
-    );
-    
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => {
-        console.log('API response received:', response.config.url, response.status);
-        return response;
-      },
-      (error) => {
-        console.error('API Error:', {
-          url: error.config?.url,
-          method: error.config?.method,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data
-        });
-        return Promise.reject(error);
-      }
-    );
-    
-    return () => {
-      axios.interceptors.request.eject(requestInterceptor);
-      axios.interceptors.response.eject(responseInterceptor);
-    };
-  }, []);
 
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -133,9 +73,9 @@ function PersonalTree() {
   const [formData, setFormData] = useState({ ...initialFormData });
   const [isValid, setIsValid] = useState(false);
   const [people, setPeople] = useState([]);
+  const [nodes, setNodes] = useState([]);
+  const [edges, setEdges] = useState([]);
   const [treeId, setTreeId] = useState(null);
-  const familyTreeRef = useRef(null);
-  const [familyTree, setFamilyTree] = useState(null);
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -220,16 +160,11 @@ function PersonalTree() {
       fetchConnectionsData(currentUserId); //new
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
+      setNodes([]);
+      setEdges([]);
       setPeople([]);
     }
   }, [currentUserId, currentUser, externalUid]);
-  
-  // Reinitialize FamilyTree when people data changes
-  useEffect(() => {
-    if (people.length > 0 && familyTreeRef.current) {
-      initializeFamilyTree(people);
-    }
-  }, [people]);
 
   // Auto-layout disabled - users can position nodes manually by dragging
   // useEffect(() => {
@@ -406,268 +341,7 @@ function PersonalTree() {
     console.log("Suggestions: ", suggestions);
   };
 
-  // Initialize FamilyTree instance
-  const initializeFamilyTree = (peopleData) => {
-    if (!familyTreeRef.current || !peopleData.length) {
-      console.log('FamilyTree initialization skipped:', {
-        hasRef: !!familyTreeRef.current,
-        peopleCount: peopleData?.length || 0
-      });
-      return;
-    }
-    
-    // Clear any existing tree
-    familyTreeRef.current.innerHTML = '';
-    
-    const treeData = convertToFamilyTreeData(peopleData);
-    console.log('FamilyTree data:', treeData);
-    console.log('Current treeId for API calls:', treeId);
-    
-    // Create FamilyTree instance with full editing capabilities
-    const tree = new FamilyTree(familyTreeRef.current, {
-      nodeBinding: {
-        field_0: "name",
-        field_1: "birthDate",
-        field_2: "birthPlace",
-        img_0: "img"
-      },
-      template: "tommy",
-      enableSearch: true,
-      enableZoom: true,
-      enablePan: true,
-      scaleInitial: FamilyTree.match.boundary,
-      scaleMax: 2,
-      scaleMin: 0.3,
-      orientation: FamilyTree.orientation.top,
-      layout: FamilyTree.layout.normal,
-      padding: 30,
-      nodeTreeMenu: true,
-      mouseScrool: FamilyTree.action.zoom,
-      
-      // Enable full editing capabilities
-      editForm: {
-        elements: [
-          { type: 'textbox', label: 'First Name', binding: 'firstName' },
-          { type: 'textbox', label: 'Middle Name', binding: 'middleName' },
-          { type: 'textbox', label: 'Last Name', binding: 'lastName' },
-          { type: 'select', options: [{value: 'male', text: 'Male'}, {value: 'female', text: 'Female'}], label: 'Gender', binding: 'gender' },
-          { type: 'date', label: 'Birth Date', binding: 'birthDate' },
-          { type: 'textbox', label: 'Birth Place', binding: 'birthPlace' },
-          { type: 'select', options: [{value: 'living', text: 'Living'}, {value: 'deceased', text: 'Deceased'}], label: 'Status', binding: 'status' },
-          { type: 'date', label: 'Date of Death', binding: 'dateOfDeath' },
-          { type: 'textbox', label: 'Place of Death', binding: 'placeOfDeath' }
-        ],
-        addMore: 'Add Partner',
-        addMoreBtn: 'Add Child',
-        titleBinding: 'name'
-      },
-      
-      // Custom menu options (global menu)
-      menu: {
-        pdf: { text: "Export PDF" },
-        png: { text: "Export PNG" },
-        svg: { text: "Export SVG" },
-        csv: { text: "Export CSV" }
-      },
-      
-      // Customize node context menu (when clicking on a person card)
-      nodeMenu: {
-        edit: { text: "Edit" },
-        remove: { text: "Delete" }
-      },
-      
-      // Toolbar with editing tools
-      toolbar: {
-        fullScreen: true,
-        zoom: true,
-        fit: true,
-        openFullScreenBtn: true,
-        expandAllBtn: true,
-        collapseAllBtn: true
-      },
-      
-      // Custom templates for better display
-      tags: {
-        "male": {
-          template: "tommy"
-        },
-        "female": {
-          template: "tommy_female"
-        }
-      },
-      
-      // Custom template definitions for name and image prominence
-      templateConfig: {
-        tommy: {
-          field_0: {
-            size: [200, 40],
-            color: '#000000',
-            'font-size': 16,
-            'font-weight': 'bold'
-          },
-          field_1: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          field_2: {
-            size: [200, 20],
-            color: '#666666', 
-            'font-size': 12
-          },
-          img_0: {
-            width: 60,
-            height: 60,
-            border_radius: 30
-          }
-        },
-        tommy_female: {
-          field_0: {
-            size: [200, 40],
-            color: '#000000',
-            'font-size': 16,
-            'font-weight': 'bold'
-          },
-          field_1: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          field_2: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          img_0: {
-            width: 60,
-            height: 60,
-            border_radius: 30
-          }
-        }
-      },
-      nodes: treeData
-    });
-    
-    // Add click event handlers
-    tree.on('click', function(sender, args) {
-      if (args.node) {
-        const person = peopleData.find(p => p.personId === args.node.id);
-        if (person) {
-          handleViewPerson(person);
-        }
-      }
-    });
-    
-    // Handle node updates from built-in editing
-    tree.on('update', function(sender, args) {
-      console.log('Node updated:', args.updateNodesData);
-      // Sync updates back to your backend using existing API pattern
-      args.updateNodesData.forEach(async (updatedNode) => {
-        try {
-          const updateData = {
-            firstName: updatedNode.firstName || '',
-            middleName: updatedNode.middleName || '',
-            lastName: updatedNode.lastName || '',
-            gender: updatedNode.gender || 'male',
-            birthDate: updatedNode.birthDate || '',
-            birthPlace: updatedNode.birthPlace || '',
-            status: updatedNode.status || 'living',
-            dateOfDeath: updatedNode.dateOfDeath || '',
-            placeOfDeath: updatedNode.placeOfDeath || ''
-          };
-          
-          console.log('Updating person with data:', updateData);
-          console.log('API URL:', `http://localhost:3001/api/persons/${updatedNode.id}`);
-          
-          const response = await axios.put(`http://localhost:3001/api/persons/${updatedNode.id}`, updateData);
-          console.log(`Successfully updated person ${updatedNode.id}`);
-          
-          // Refresh the tree data
-          if (!isCurrentUsersTree) {
-            await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-          } else {
-            await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-          }
-        } catch (error) {
-          console.error('Error updating person:', error);
-          console.error('Error details:', error.response?.data);
-          alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
-        }
-      });
-    });
-    
-    // Handle node additions from built-in editing
-    tree.on('add', function(sender, args) {
-      console.log('Node added:', args.addNodesData);
-      // Handle new person creation through built-in interface using existing API pattern
-      args.addNodesData.forEach(async (newNode) => {
-        try {
-          const personData = {
-            firstName: newNode.firstName || '',
-            middleName: newNode.middleName || '',
-            lastName: newNode.lastName || '',
-            gender: newNode.gender || 'male',
-            birthDate: newNode.birthDate || '',
-            birthPlace: newNode.birthPlace || '',
-            status: newNode.status || 'living',
-            dateOfDeath: newNode.dateOfDeath || '',
-            placeOfDeath: newNode.placeOfDeath || '',
-            relationships: [] // Handle relationships separately
-          };
-          
-          console.log('Adding new person with data:', personData);
-          console.log('Using treeId:', treeId);
-          
-          if (!treeId) {
-            throw new Error('No treeId available for adding person');
-          }
-          
-          const response = await axios.post(`http://localhost:3001/api/persons/${treeId}`, personData);
-          console.log('Successfully added new person:', response.data);
-          
-          // Refresh the tree data
-          if (!isCurrentUsersTree) {
-            await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-          } else {
-            await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-          }
-        } catch (error) {
-          console.error('Error adding person:', error);
-          console.error('Error details:', error.response?.data);
-          alert(`Failed to add person: ${error.response?.data?.message || error.message}`);
-        }
-      });
-    });
-    
-    // Handle node deletions from built-in editing
-    tree.on('remove', function(sender, args) {
-      console.log('Node removed:', args.removeNodeId);
-      // Use your existing delete function
-      if (args.removeNodeId) {
-        handleDeletePerson(args.removeNodeId);
-      }
-    });
-    
-    // Handle custom node menu actions
-    tree.on('nodeMenuClick', function(sender, args) {
-      console.log('Node menu clicked:', args.menuId, 'for node:', args.nodeId);
-      
-      if (args.menuId === 'remove') {
-        // Confirm and delete
-        const person = peopleData.find(p => p.personId === args.nodeId);
-        const personName = person ? `${person.firstName} ${person.lastName}` : 'this person';
-        
-        if (confirm(`Are you sure you want to delete ${personName}?`)) {
-          handleDeletePerson(args.nodeId);
-        }
-      }
-      // Edit is handled automatically by FamilyTreeJS
-    });
-    
-    setFamilyTree(tree);
-  };
-
-  const transformPeopleToNodes_OLD = (people, openSidebarFunc, handleDeletePersonFunc, handleViewPersonFunc, isCurrentUsersTreeBool) => {
+  const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
     return people.map((person) => ({
       id: person.personId,
       type: "person",
@@ -1448,10 +1122,26 @@ function PersonalTree() {
         console.log("People data:", fetchedPeople);
         setPeople(fetchedPeople);
 
-        // Initialize FamilyTreeJS with the fetched data
-        setTimeout(() => {
-          initializeFamilyTree(fetchedPeople);
-        }, 100); // Small delay to ensure DOM is ready
+        const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool);
+        const { reactFlowEdges, dagreEdges, marriageJunctions } = transformPeopleToEdgesEnhanced(fetchedPeople);
+        
+        // Add marriage junction nodes to the nodes array
+        const allNodes = [...newNodes, ...marriageJunctions];
+        console.log('All nodes (people + junctions):', allNodes.length);
+
+        console.log('In fetchTreeData - About to set edges:', reactFlowEdges);
+        
+        // Enhanced family tree transformation applied
+        
+        // Manual layout mode - provide initial positions then users can drag
+        console.log('FetchTreeData - Manual dragging mode, providing initial positions');
+        
+        // Apply initial positioning so nodes aren't all stacked at (0,0)
+        const { layoutedNodes } = applyFamilyTreeLayout(allNodes, fetchedPeople);
+        console.log('Applied initial positions, now users can drag nodes freely');
+        
+        setNodes(layoutedNodes);
+        setEdges(reactFlowEdges);
       } else {
         console.error("No treeId available to fetch persons.");
       }
@@ -1877,7 +1567,7 @@ function PersonalTree() {
 
   return (
     <Layout>
-      <div className="min-h-[97vh] relative overflow-hidden pt-8" style={{ backgroundColor: "#D9D9D9" }}>
+      <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
         {/* Top Right Add Node Button */}
         <div className="fixed top-20 right-6 z-30">
           {/* White panel background */}
@@ -1894,29 +1584,28 @@ function PersonalTree() {
         </div>
 
         {/* Main Tree Area */}
-        <div 
-          className="w-full"
-          style={{ 
-            height: "calc(100vh - 60px)",
-            position: "absolute",
-            top: "40px",
-            left: "0",
-            right: "0"
-          }}
-        >
-          <div 
-            ref={familyTreeRef}
-            id="family-tree-container"
-            style={{ 
-              width: "calc(100% - 20px)", 
-              height: "calc(100% - 20px)",
-              backgroundColor: "white",
-              borderRadius: "8px",
-              margin: "0 10px",
-              border: "1px solid #e5e7eb",
-              position: "relative"
-            }}
-          />
+        <div className="flex items-center justify-center" style={{ height: "calc(100vh - 64px)" }}>
+          <ReactFlowProvider>
+            <div style={{ width: "100%", height: "100%" }}>
+              {console.log('RENDERING ReactFlow with nodes:', nodes.length, 'edges:', edges.length)}
+              {console.log('RENDERING ReactFlow edges:', edges)}
+              <ReactFlow 
+                nodes={nodes} 
+                edges={edges} 
+                nodeTypes={nodeTypes} 
+                fitView
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable={true}
+                onNodesChange={() => {
+                  // Node dragging is disabled, no position changes needed
+                }}
+              >
+                <Background />
+                <Controls />
+              </ReactFlow>
+            </div>
+          </ReactFlowProvider>
         </div>
         {/* Loading Spinner */}
         {isLoading && (
