@@ -20,11 +20,24 @@ exports.createNewFamilyTree = async (userId, treeName, personData) => {
   const treeId = docRef.id;
 
   const { firstName, middleName = "", lastName, birthDate = "", birthPlace = "", gender = "", status = "living", relationships = [] } = personData;
-  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships);
-  await personsCollection.doc(userId).set({ ...person });
+
+  const person = new Person(
+    treeId, // or treeIds if you're using the new model
+    firstName,
+    middleName,
+    lastName,
+    birthDate,
+    birthPlace,
+    gender,
+    status,
+    relationships
+  );
+
+  // ✅ DO NOT overwrite the existing person (personal tree)
+  await personsCollection.add({ ...person });
+
   return treeId;
 };
-
 
 exports.getFamilyTreeById = async (treeId) => {
   const doc = await collection.doc(treeId).get();
@@ -90,16 +103,16 @@ exports.deleteFamilyTree = async (treeId) => {
 
 exports.getPersonalTree = async (userId) => {
   const snapshot = await collection
-    .where("userId", "==", userId) 
-    .where("treeName", "==", "personal-"+userId) 
-    .where("sharedUsers", "==", []) 
-    .limit(1) 
+    .where("userId", "==", userId)
+    .where("treeName", "==", "personal-" + userId)
+    .where("sharedUsers", "==", [])
+    .limit(1)
     .get();
 
   if (snapshot.empty) {
-    return null; 
+    return null;
   }
-  
+
   const doc = snapshot.docs[0];
   return { treeId: doc.id, ...doc.data() };
 };
