@@ -1,8 +1,5 @@
 const mergeRequestService = require('../services/mergeRequestService');
 const familyGroupMemberService = require('../services/familyGroupMemberService');
-const familyGroupService = require('../services/familyGroupService');
-const treeMergeService = require('../services/treeMergeService');
-const userService = require('../services/userService');
 
 exports.createMergeRequest = async (req, res) => {
   const { groupId, requesterId, targetUserId } = req.body;
@@ -77,57 +74,14 @@ exports.updateMergeRequestStatus = async (req, res) => {
     return res.status(400).json({ message: 'Status and reviewedBy are required.' });
   }
 
-  if (!['approved', 'denied', 'failed'].includes(status)) {
-    return res.status(400).json({ message: 'Status must be "approved", "denied", or "failed".' });
+  if (!['approved', 'denied'].includes(status)) {
+    return res.status(400).json({ message: 'Status must be either "approved" or "denied".' });
   }
 
   try {
-    // First, get the merge request details to know who is requesting and which group
-    const mergeRequest = await mergeRequestService.getMergeRequestById(requestId);
-    
-    if (!mergeRequest) {
-      return res.status(404).json({ message: 'Merge request not found.' });
-    }
-
-    // Update the merge request status first
     await mergeRequestService.updateMergeRequestStatus(requestId, status, reviewedBy);
     
-    // If approved, execute the actual merge
-    if (status === 'approved') {
-      try {
-        // Get the group to find its associated tree
-        const group = await familyGroupService.getFamilyGroupById(mergeRequest.groupId);
-        if (!group) {
-          throw new Error('Group not found');
-        }
-
-        // Execute the merge: copy requester's personal tree into group tree
-        const mergeResult = await treeMergeService.mergePersonalTreeIntoGroup(
-          mergeRequest.requesterId,
-          group.treeId
-        );
-
-        console.log('Merge executed successfully:', mergeResult);
-        
-        res.status(200).json({ 
-          message: 'Merge request approved and executed successfully.',
-          mergeResult: mergeResult
-        });
-        
-      } catch (mergeError) {
-        console.error('Error executing merge:', mergeError);
-        // Update request status to failed
-        await mergeRequestService.updateMergeRequestStatus(requestId, 'failed', reviewedBy);
-        
-        res.status(500).json({ 
-          message: 'Merge request approved but execution failed.',
-          error: mergeError.message
-        });
-      }
-    } else {
-      res.status(200).json({ message: 'Merge request denied successfully.' });
-    }
-    
+    res.status(200).json({ message: 'Merge request status updated successfully.' });
   } catch (error) {
     console.error('Error updating merge request status:', error);
     res.status(500).json({ message: 'Failed to update merge request status.' });

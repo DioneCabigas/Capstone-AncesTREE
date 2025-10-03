@@ -6,23 +6,27 @@ const collection = db.collection("persons");
 const FieldValue = admin.firestore.FieldValue;
 
 exports.createPerson = async (treeId, personData) => {
-  const { firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships = [], dateOfDeath, placeOfDeath } = personData;
+  const { firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships = [] } = personData;
 
   //   const birthDateObj = new Date(birthDate);
   //   if (isNaN(birthDateObj.getTime())) {
   //     return null;
   //   }
 
-  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships, [], dateOfDeath, placeOfDeath);
+  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships);
 
   const docRef = await collection.add({ ...person });
   return { personId: docRef.id, ...person };
 };
 
 exports.createPersonSelf = async (treeId, uid, personData) => {
-  const { firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships = [], dateOfDeath, placeOfDeath } = personData;
-  
-  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships, [], dateOfDeath, placeOfDeath);
+  const { firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships = [] } = personData;
+  //   const birthDateObj = new Date(birthDate);
+  //   if (isNaN(birthDateObj.getTime())) {
+  //     console.error("Invalid birthDate provided:", birthDate);
+  //     return null;
+  //   }
+  const person = new Person(treeId, firstName, middleName, lastName, birthDate, birthPlace, gender, status, relationships);
   await collection.doc(uid).set({ ...person });
   return { personId: uid, ...person };
 };
@@ -38,31 +42,6 @@ exports.getPersonById = async (personId) => {
 exports.getPeopleByTreeId = async (treeId) => {
   const snapshot = await collection.where("treeId", "==", treeId).get();
   return snapshot.docs.map((doc) => ({ personId: doc.id, ...doc.data() }));
-};
-
-/**
- * Gets all people who belong to a specific group tree
- * This includes people whose groupTreeIds array contains the specified treeId
- * OR whose treeId equals the specified treeId (for group trees)
- */
-exports.getPeopleByGroupTreeId = async (groupTreeId) => {
-  // Get people who have this group tree in their groupTreeIds array
-  const groupMembersSnapshot = await collection.where("groupTreeIds", "array-contains", groupTreeId).get();
-  const groupMembers = groupMembersSnapshot.docs.map((doc) => ({ personId: doc.id, ...doc.data() }));
-  
-  // Also get people whose main treeId is this group tree (for people created directly in the group)
-  const directMembersSnapshot = await collection.where("treeId", "==", groupTreeId).get();
-  const directMembers = directMembersSnapshot.docs.map((doc) => ({ personId: doc.id, ...doc.data() }));
-  
-  // Combine and deduplicate
-  const allMembers = [...groupMembers];
-  directMembers.forEach(directMember => {
-    if (!allMembers.find(member => member.personId === directMember.personId)) {
-      allMembers.push(directMember);
-    }
-  });
-  
-  return allMembers;
 };
 
 exports.updatePerson = async (personId, data) => {
@@ -81,16 +60,6 @@ exports.updatePerson = async (personId, data) => {
     });
 
     delete updateData.relationships;
-  }
-
-  if (updateData.groupTreeIds && Array.isArray(updateData.groupTreeIds)) {
-    // For groupTreeIds, we replace the entire array instead of union
-    // This allows both adding and removing group trees
-    await docRef.update({
-      groupTreeIds: updateData.groupTreeIds,
-    });
-
-    delete updateData.groupTreeIds;
   }
 
   if (Object.keys(updateData).length > 0) {
@@ -122,4 +91,3 @@ exports.deletePerson = async (personId) => {
   await collection.doc(personId).delete();
   return { success: true };
 };
-

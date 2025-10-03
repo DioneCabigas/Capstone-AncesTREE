@@ -5,68 +5,17 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Layout from '@/components/Layout';
 import AuthController from '@/components/AuthController';
-import React, { useState, useEffect, useRef } from 'react';
-import { MoreHorizontal, Plus, User, Edit3, UserPlus, X, ToggleLeft, ToggleRight } from "lucide-react";
-import FamilyTree from "@balkangraph/familytree.js";
+import React, { useState, useEffect } from 'react';
+import { MoreHorizontal, Plus, User, Edit3, UserPlus, X } from "lucide-react";
+import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow } from "reactflow";
+import dagre from "dagre";
+import "reactflow/dist/style.css";
+import PersonNode from "@/components/PersonNode";
 import axios from "axios";
 
-// Convert people data to FamilyTreeJS format
-const convertToFamilyTreeData = (people) => {
-  const familyTreeData = [];
-  
-  people.forEach(person => {
-    const node = {
-      id: person.personId,
-      
-      // Primary display name (bold on card)
-      name: `${person.firstName || ''} ${person.lastName || ''}`.trim() || 'Unknown Person',
-      
-      // All individual field mappings for editing
-      firstName: person.firstName || '',
-      middleName: person.middleName || '',
-      lastName: person.lastName || '',
-      gender: person.gender || 'male',
-      birthDate: person.birthDate || '',
-      birthPlace: person.birthPlace || '',
-      status: person.status || 'living',
-      dateOfDeath: person.dateOfDeath || '',
-      placeOfDeath: person.placeOfDeath || '',
-      
-      // Display photo - ensure we have a proper URL or create default avatar
-      img: person.photo || person.profilePhoto || person.image || 
-           `https://ui-avatars.com/api/?name=${encodeURIComponent((person.firstName || '') + ' ' + (person.lastName || ''))}&size=60&background=4F6F52&color=ffffff&rounded=true`,
-      
-      // Family relationships
-      pids: [], // Partner IDs
-      fid: null, // Father ID
-      mid: null, // Mother ID
-      
-      // Tags for template selection
-      tags: [person.gender || 'male']
-    };
-    
-    // Set parent relationships
-    person.relationships?.forEach(rel => {
-      if (rel.type.toLowerCase() === 'parent') {
-        // Find the parent and determine if it's father or mother
-        const parent = people.find(p => p.personId === rel.relatedPersonId);
-        if (parent) {
-          if (parent.gender === 'male') {
-            node.fid = rel.relatedPersonId;
-          } else {
-            node.mid = rel.relatedPersonId;
-          }
-        }
-      } else if (rel.type.toLowerCase() === 'spouse') {
-        node.pids.push(rel.relatedPersonId);
-      }
-    });
-    
-    familyTreeData.push(node);
-  });
-  
-  console.log('Converted FamilyTreeJS data with all fields:', familyTreeData);
-  return familyTreeData;
+const nodeTypes = {
+  person: PersonNode,
+  marriage: () => null,
 };
 
 const initialFormData = {
@@ -87,42 +36,6 @@ function PersonalTree() {
   const searchParams = useSearchParams();
   const externalUid = searchParams.get("uid");
   const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
-  
-  // Add axios interceptor for better error debugging
-  useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        console.log('Making API request:', config.method?.toUpperCase(), config.url);
-        return config;
-      },
-      (error) => {
-        console.error('Request error:', error);
-        return Promise.reject(error);
-      }
-    );
-    
-    const responseInterceptor = axios.interceptors.response.use(
-      (response) => {
-        console.log('API response received:', response.config.url, response.status);
-        return response;
-      },
-      (error) => {
-        console.error('API Error:', {
-          url: error.config?.url,
-          method: error.config?.method,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data
-        });
-        return Promise.reject(error);
-      }
-    );
-    
-    return () => {
-      axios.interceptors.request.eject(requestInterceptor);
-      axios.interceptors.response.eject(responseInterceptor);
-    };
-  }, []);
 
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -133,28 +46,15 @@ function PersonalTree() {
   const [formData, setFormData] = useState({ ...initialFormData });
   const [isValid, setIsValid] = useState(false);
   const [people, setPeople] = useState([]);
+  const [nodes, setNodes] = useState([]);
+  const [edges, setEdges] = useState([]);
   const [treeId, setTreeId] = useState(null);
-  const familyTreeRef = useRef(null);
-  const [familyTree, setFamilyTree] = useState(null);
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
   const [connections, setConnections] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
-
-  // New state for toolbar functionality
-  const [autoLayout, setAutoLayout] = useState(true); // Keep auto layout as default
-  
-  // Edit modal state
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editPersonData, setEditPersonData] = useState(null);
-  const [editConnectionPersonId, setEditConnectionPersonId] = useState("");
-  const [editRelationshipType, setEditRelationshipType] = useState("");
-  
-  // Remove relationship modal state
-  const [isRemoveRelationshipModalOpen, setIsRemoveRelationshipModalOpen] = useState(false);
-  const [selectedPersonForRelationshipRemoval, setSelectedPersonForRelationshipRemoval] = useState(null);
 
   const getSortedSpouseIds = (id1, id2) => {
     return id1 < id2 ? [id1, id2] : [id2, id1];
@@ -220,30 +120,11 @@ function PersonalTree() {
       fetchConnectionsData(currentUserId); //new
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
+      setNodes([]);
+      setEdges([]);
       setPeople([]);
     }
   }, [currentUserId, currentUser, externalUid]);
-  
-  // Reinitialize FamilyTree when people data changes
-  useEffect(() => {
-    if (people.length > 0 && familyTreeRef.current) {
-      initializeFamilyTree(people);
-    }
-  }, [people]);
-
-  // Auto-layout disabled - users can position nodes manually by dragging
-  // useEffect(() => {
-  //   if (autoLayout && people.length > 0) {
-  //     console.log('Auto-layout useEffect triggered with people:', people.length);
-  //     const currentNodes = transformPeopleToNodes(people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTree);
-  //     const { reactFlowEdges, dagreEdges, marriageJunctions } = transformPeopleToEdgesEnhanced(people);
-  //     const allNodes = [...currentNodes, ...marriageJunctions];
-  //     const { layoutedNodes } = applyFamilyTreeLayout(allNodes, people);
-  //     setNodes(layoutedNodes);
-  //     setEdges(reactFlowEdges);
-  //   }
-  // }, [autoLayout, people, isCurrentUsersTree]);
-
 
   const fetchUserDetails = async (uid) => {
     try {
@@ -406,268 +287,7 @@ function PersonalTree() {
     console.log("Suggestions: ", suggestions);
   };
 
-  // Initialize FamilyTree instance
-  const initializeFamilyTree = (peopleData) => {
-    if (!familyTreeRef.current || !peopleData.length) {
-      console.log('FamilyTree initialization skipped:', {
-        hasRef: !!familyTreeRef.current,
-        peopleCount: peopleData?.length || 0
-      });
-      return;
-    }
-    
-    // Clear any existing tree
-    familyTreeRef.current.innerHTML = '';
-    
-    const treeData = convertToFamilyTreeData(peopleData);
-    console.log('FamilyTree data:', treeData);
-    console.log('Current treeId for API calls:', treeId);
-    
-    // Create FamilyTree instance with full editing capabilities
-    const tree = new FamilyTree(familyTreeRef.current, {
-      nodeBinding: {
-        field_0: "name",
-        field_1: "birthDate",
-        field_2: "birthPlace",
-        img_0: "img"
-      },
-      template: "tommy",
-      enableSearch: true,
-      enableZoom: true,
-      enablePan: true,
-      scaleInitial: FamilyTree.match.boundary,
-      scaleMax: 2,
-      scaleMin: 0.3,
-      orientation: FamilyTree.orientation.top,
-      layout: FamilyTree.layout.normal,
-      padding: 30,
-      nodeTreeMenu: true,
-      mouseScrool: FamilyTree.action.zoom,
-      
-      // Enable full editing capabilities
-      editForm: {
-        elements: [
-          { type: 'textbox', label: 'First Name', binding: 'firstName' },
-          { type: 'textbox', label: 'Middle Name', binding: 'middleName' },
-          { type: 'textbox', label: 'Last Name', binding: 'lastName' },
-          { type: 'select', options: [{value: 'male', text: 'Male'}, {value: 'female', text: 'Female'}], label: 'Gender', binding: 'gender' },
-          { type: 'date', label: 'Birth Date', binding: 'birthDate' },
-          { type: 'textbox', label: 'Birth Place', binding: 'birthPlace' },
-          { type: 'select', options: [{value: 'living', text: 'Living'}, {value: 'deceased', text: 'Deceased'}], label: 'Status', binding: 'status' },
-          { type: 'date', label: 'Date of Death', binding: 'dateOfDeath' },
-          { type: 'textbox', label: 'Place of Death', binding: 'placeOfDeath' }
-        ],
-        addMore: 'Add Partner',
-        addMoreBtn: 'Add Child',
-        titleBinding: 'name'
-      },
-      
-      // Custom menu options (global menu)
-      menu: {
-        pdf: { text: "Export PDF" },
-        png: { text: "Export PNG" },
-        svg: { text: "Export SVG" },
-        csv: { text: "Export CSV" }
-      },
-      
-      // Customize node context menu (when clicking on a person card)
-      nodeMenu: {
-        edit: { text: "Edit" },
-        remove: { text: "Delete" }
-      },
-      
-      // Toolbar with editing tools
-      toolbar: {
-        fullScreen: true,
-        zoom: true,
-        fit: true,
-        openFullScreenBtn: true,
-        expandAllBtn: true,
-        collapseAllBtn: true
-      },
-      
-      // Custom templates for better display
-      tags: {
-        "male": {
-          template: "tommy"
-        },
-        "female": {
-          template: "tommy_female"
-        }
-      },
-      
-      // Custom template definitions for name and image prominence
-      templateConfig: {
-        tommy: {
-          field_0: {
-            size: [200, 40],
-            color: '#000000',
-            'font-size': 16,
-            'font-weight': 'bold'
-          },
-          field_1: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          field_2: {
-            size: [200, 20],
-            color: '#666666', 
-            'font-size': 12
-          },
-          img_0: {
-            width: 60,
-            height: 60,
-            border_radius: 30
-          }
-        },
-        tommy_female: {
-          field_0: {
-            size: [200, 40],
-            color: '#000000',
-            'font-size': 16,
-            'font-weight': 'bold'
-          },
-          field_1: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          field_2: {
-            size: [200, 20],
-            color: '#666666',
-            'font-size': 12
-          },
-          img_0: {
-            width: 60,
-            height: 60,
-            border_radius: 30
-          }
-        }
-      },
-      nodes: treeData
-    });
-    
-    // Add click event handlers
-    tree.on('click', function(sender, args) {
-      if (args.node) {
-        const person = peopleData.find(p => p.personId === args.node.id);
-        if (person) {
-          handleViewPerson(person);
-        }
-      }
-    });
-    
-    // Handle node updates from built-in editing
-    tree.on('update', function(sender, args) {
-      console.log('Node updated:', args.updateNodesData);
-      // Sync updates back to your backend using existing API pattern
-      args.updateNodesData.forEach(async (updatedNode) => {
-        try {
-          const updateData = {
-            firstName: updatedNode.firstName || '',
-            middleName: updatedNode.middleName || '',
-            lastName: updatedNode.lastName || '',
-            gender: updatedNode.gender || 'male',
-            birthDate: updatedNode.birthDate || '',
-            birthPlace: updatedNode.birthPlace || '',
-            status: updatedNode.status || 'living',
-            dateOfDeath: updatedNode.dateOfDeath || '',
-            placeOfDeath: updatedNode.placeOfDeath || ''
-          };
-          
-          console.log('Updating person with data:', updateData);
-          console.log('API URL:', `http://localhost:3001/api/persons/${updatedNode.id}`);
-          
-          const response = await axios.put(`http://localhost:3001/api/persons/${updatedNode.id}`, updateData);
-          console.log(`Successfully updated person ${updatedNode.id}`);
-          
-          // Refresh the tree data
-          if (!isCurrentUsersTree) {
-            await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-          } else {
-            await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-          }
-        } catch (error) {
-          console.error('Error updating person:', error);
-          console.error('Error details:', error.response?.data);
-          alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
-        }
-      });
-    });
-    
-    // Handle node additions from built-in editing
-    tree.on('add', function(sender, args) {
-      console.log('Node added:', args.addNodesData);
-      // Handle new person creation through built-in interface using existing API pattern
-      args.addNodesData.forEach(async (newNode) => {
-        try {
-          const personData = {
-            firstName: newNode.firstName || '',
-            middleName: newNode.middleName || '',
-            lastName: newNode.lastName || '',
-            gender: newNode.gender || 'male',
-            birthDate: newNode.birthDate || '',
-            birthPlace: newNode.birthPlace || '',
-            status: newNode.status || 'living',
-            dateOfDeath: newNode.dateOfDeath || '',
-            placeOfDeath: newNode.placeOfDeath || '',
-            relationships: [] // Handle relationships separately
-          };
-          
-          console.log('Adding new person with data:', personData);
-          console.log('Using treeId:', treeId);
-          
-          if (!treeId) {
-            throw new Error('No treeId available for adding person');
-          }
-          
-          const response = await axios.post(`http://localhost:3001/api/persons/${treeId}`, personData);
-          console.log('Successfully added new person:', response.data);
-          
-          // Refresh the tree data
-          if (!isCurrentUsersTree) {
-            await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-          } else {
-            await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-          }
-        } catch (error) {
-          console.error('Error adding person:', error);
-          console.error('Error details:', error.response?.data);
-          alert(`Failed to add person: ${error.response?.data?.message || error.message}`);
-        }
-      });
-    });
-    
-    // Handle node deletions from built-in editing
-    tree.on('remove', function(sender, args) {
-      console.log('Node removed:', args.removeNodeId);
-      // Use your existing delete function
-      if (args.removeNodeId) {
-        handleDeletePerson(args.removeNodeId);
-      }
-    });
-    
-    // Handle custom node menu actions
-    tree.on('nodeMenuClick', function(sender, args) {
-      console.log('Node menu clicked:', args.menuId, 'for node:', args.nodeId);
-      
-      if (args.menuId === 'remove') {
-        // Confirm and delete
-        const person = peopleData.find(p => p.personId === args.nodeId);
-        const personName = person ? `${person.firstName} ${person.lastName}` : 'this person';
-        
-        if (confirm(`Are you sure you want to delete ${personName}?`)) {
-          handleDeletePerson(args.nodeId);
-        }
-      }
-      // Edit is handled automatically by FamilyTreeJS
-    });
-    
-    setFamilyTree(tree);
-  };
-
-  const transformPeopleToNodes_OLD = (people, openSidebarFunc, handleDeletePersonFunc, handleViewPersonFunc, isCurrentUsersTreeBool) => {
+  const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
     return people.map((person) => ({
       id: person.personId,
       type: "person",
@@ -692,14 +312,10 @@ function PersonalTree() {
         handleDeletePerson: handleDeletePerson,
         handleViewPerson: handleViewPerson,
         handleEditPerson: (personData) => {
-          setEditPersonData(personData);
-          setEditConnectionPersonId("");
-          setEditRelationshipType("");
-          setIsEditModalOpen(true);
-        },
-        handleRemoveRelationship: (personData) => {
-          setSelectedPersonForRelationshipRemoval(personData);
-          setIsRemoveRelationshipModalOpen(true);
+          setSelectedPersonId(personData.personId);
+          setFormData(personData);
+          setIsEditMode(true);
+          setSidebarOpen(true);
         },
         isCurrentUsersTree: isCurrentUsersTreeBool,
       },
@@ -716,198 +332,7 @@ function PersonalTree() {
     setPersonDetailsInModal(null);
   };
 
-  // Enhanced family tree transformation with T-junctions
-  const transformPeopleToEdgesEnhanced = (people) => {
-    console.log('=== ENHANCED FAMILY TREE WITH T-JUNCTIONS ===');
-    const reactFlowEdges = [];
-    const dagreEdges = [];
-    const marriageJunctions = [];
-    const processedRelationships = new Set();
-    const spousePairs = new Map(); // Track spouse pairs for junction creation
-    
-    // Step 1: Identify spouse relationships and create spouse pairs
-    people.forEach(person => {
-      person.relationships?.forEach(rel => {
-        if (rel.type.toLowerCase() === 'spouse') {
-          const [id1, id2] = getSortedSpouseIds(person.personId, rel.relatedPersonId);
-          const pairKey = `${id1}-${id2}`;
-          
-          if (!spousePairs.has(pairKey)) {
-            spousePairs.set(pairKey, { spouse1: id1, spouse2: id2 });
-            console.log(`Found spouse pair: ${id1} ↔ ${id2}`);
-          }
-        }
-      });
-    });
-    
-    // Step 2: Create T-junction nodes for each spouse pair
-    spousePairs.forEach((pair, pairKey) => {
-      // Horizontal junction - connects the two spouses
-      const hJunctionId = `h-junction-${pairKey}`;
-      marriageJunctions.push({
-        id: hJunctionId,
-        type: 'marriage',
-        position: { x: 0, y: 0 }, // Will be positioned later
-        data: { isHorizontalJunction: true, spousePair: pair }
-      });
-      
-      // Vertical junction - connects to children (if any)
-      const vJunctionId = `v-junction-${pairKey}`;
-      marriageJunctions.push({
-        id: vJunctionId,
-        type: 'marriage', 
-        position: { x: 0, y: 0 }, // Will be positioned later
-        data: { isVerticalJunction: true, spousePair: pair }
-      });
-      
-      // Create spouse connection edges via horizontal junction
-      reactFlowEdges.push(
-        // Spouse 1 to horizontal junction
-        {
-          id: `spouse1-to-hjunction-${pairKey}`,
-          source: pair.spouse1,
-          target: hJunctionId,
-          sourceHandle: 'right',
-          targetHandle: 'left',
-          type: 'straight',
-          style: { stroke: '#4F6F52', strokeWidth: 2 }
-        },
-        // Horizontal junction to spouse 2
-        {
-          id: `hjunction-to-spouse2-${pairKey}`,
-          source: hJunctionId,
-          target: pair.spouse2,
-          sourceHandle: 'right',
-          targetHandle: 'left',
-          type: 'straight',
-          style: { stroke: '#4F6F52', strokeWidth: 2 }
-        }
-        // Removed vertical red line - children will connect directly from horizontal junction
-      );
-      
-      // Dagre edge to keep spouses on same level
-      dagreEdges.push({
-        source: pair.spouse1,
-        target: pair.spouse2,
-        minlen: 1,
-        weight: 0.1,
-        constraint: "same"
-      });
-      
-      console.log(`Created T-junction system for spouse pair: ${pairKey}`);
-    });
-    
-    // Step 3: Process parent-child relationships
-    people.forEach(person => {
-      person.relationships?.forEach(rel => {
-        const relationshipKey = `${person.personId}-${rel.relatedPersonId}-${rel.type.toLowerCase()}`;
-        const reverseKey = `${rel.relatedPersonId}-${person.personId}-${rel.type.toLowerCase()}`;
-        
-        // Skip if already processed or if it's a spouse relationship (handled above)
-        if (processedRelationships.has(relationshipKey) || 
-            processedRelationships.has(reverseKey) ||
-            rel.type.toLowerCase() === 'spouse') {
-          return;
-        }
-        
-        const lowercaseRelType = rel.type.toLowerCase();
-        let parentId, childId;
-        
-        if (lowercaseRelType === 'parent') {
-          parentId = rel.relatedPersonId;
-          childId = person.personId;
-        } else if (lowercaseRelType === 'child') {
-          parentId = person.personId;
-          childId = rel.relatedPersonId;
-        } else {
-          return; // Skip non-family relationships
-        }
-        
-        console.log(`Processing parent-child: ${parentId} → ${childId}`);
-        
-        // Check if parent is part of a spouse pair
-        let parentConnection = null;
-        spousePairs.forEach((pair, pairKey) => {
-          if (pair.spouse1 === parentId || pair.spouse2 === parentId) {
-            parentConnection = `h-junction-${pairKey}`; // Connect directly to horizontal junction
-            console.log(`  Parent ${parentId} is in spouse pair, connecting via ${parentConnection}`);
-          }
-        });
-        
-        // Create unique edge ID to prevent duplicates
-        const edgeId = parentConnection ? 
-          `hjunction-to-child-${childId}-from-${parentConnection.replace('h-junction-', '')}` :
-          `parent-child-${parentId}-${childId}`;
-          
-        // Check if this edge already exists
-        const edgeExists = reactFlowEdges.some(edge => edge.id === edgeId);
-        
-        if (!edgeExists) {
-          if (parentConnection) {
-            // Connect child directly to the horizontal junction of the spouse pair
-            reactFlowEdges.push({
-              id: edgeId,
-              source: parentConnection,
-              target: childId,
-              sourceHandle: 'bottom',
-              targetHandle: 'top',
-              type: 'smoothstep',
-              style: { stroke: '#4F6F52', strokeWidth: 2 }
-            });
-          } else {
-            // Direct parent-child connection (no spouse pair involved)
-            reactFlowEdges.push({
-              id: edgeId,
-              source: parentId,
-              target: childId,
-              sourceHandle: 'bottom',
-              targetHandle: 'top',
-              type: 'smoothstep',
-              style: { stroke: '#4F6F52', strokeWidth: 2 }
-            });
-          }
-          console.log(`Added parent-child edge: ${edgeId}`);
-        } else {
-          console.log(`Skipped duplicate edge: ${edgeId}`);
-        }
-        
-        // Add dagre edge for hierarchy
-        dagreEdges.push({
-          source: parentId,
-          target: childId
-        });
-        
-        // Mark as processed
-        processedRelationships.add(relationshipKey);
-        processedRelationships.add(reverseKey);
-      });
-    });
-    
-    console.log('=== T-JUNCTION TRANSFORMATION COMPLETE ===');
-    console.log('Spouse pairs found:', spousePairs.size);
-    console.log('Marriage junctions created:', marriageJunctions.length);
-    console.log('Total edges created:', reactFlowEdges.length);
-    
-    return { reactFlowEdges, dagreEdges, marriageJunctions };
-  };
-
   const transformPeopleToEdges = (people) => {
-    console.log('=== TRANSFORM PEOPLE TO EDGES ===');
-    console.log('People data:', people);
-    
-    // Check what relationships exist
-    people.forEach((person, index) => {
-      console.log(`Person ${index}: ${person.firstName} ${person.lastName}`);
-      console.log('  Relationships:', person.relationships);
-      if (person.relationships && person.relationships.length > 0) {
-        person.relationships.forEach((rel, relIndex) => {
-          console.log(`    Relationship ${relIndex}: ${rel.type} to ${rel.relatedPersonId}`);
-        });
-      } else {
-        console.log('    No relationships found');
-      }
-    });
-    
     const reactFlowEdges = [];
     const dagreNodes = new Map();
     const dagreEdges = [];
@@ -928,7 +353,6 @@ function PersonalTree() {
         if (!targetPerson) return;
 
         const lowercaseRelType = rel.type.toLowerCase();
-        console.log(`Processing relationship: ${person.firstName} ${person.lastName} -> ${targetPerson.firstName} ${targetPerson.lastName} (${lowercaseRelType})`);
 
         // Parent - Child Logic
         let parentId, childId;
@@ -943,24 +367,20 @@ function PersonalTree() {
         if (parentId && childId) {
           const edgeKey = `P_${parentId}-${childId}`;
           if (!addedReactFlowEdges.has(edgeKey)) {
-            const parentChildEdge = {
+            reactFlowEdges.push({
               id: `e-${parentId}-${childId}-parentOf`,
-              source: parentId, // Parent is the source 
-              target: childId,  // Child is the target
+              source: childId,
+              target: parentId,
               // label: "parent of",
               type: "smoothstep",
-              sourceHandle: "bottom",  // Parent handle: bottom (parent connects downward)
-              targetHandle: "top",     // Child handle: top (child receives from above)
-              style: { stroke: '#4F6F52', strokeWidth: 2 }, // Green color for parent-child connections
-            };
-            console.log('Adding parent-child edge:', parentChildEdge);
-            console.log(`  Parent ${parentId} (bottom handle) → Child ${childId} (top handle)`);
-            reactFlowEdges.push(parentChildEdge);
+              // sourceHandle: "bottom",
+              // targetHandle: "top",
+            });
             addedReactFlowEdges.add(edgeKey);
           }
           const dagreEdgeKey = `D_${parentId}-${childId}`;
           if (!addedDagreEdges.has(dagreEdgeKey)) {
-            dagreEdges.push({ source: parentId, target: childId }); // Correct direction: parent -> child (for proper hierarchy)
+            dagreEdges.push({ source: childId, target: parentId });
             addedDagreEdges.add(dagreEdgeKey);
           }
         }
@@ -971,18 +391,15 @@ function PersonalTree() {
           const spouseEdgeKey = `S_${id1}-${id2}`;
 
           if (!addedReactFlowEdges.has(spouseEdgeKey)) {
-            const spouseEdge = {
+            reactFlowEdges.push({
               id: `e-${id1}-${id2}-spouseOf`,
               source: id1,
               target: id2,
               // label: "spouse of",
               type: "smoothstep",
-              sourceHandle: "right",
-              targetHandle: "left",
-              style: { stroke: '#4F6F52', strokeWidth: 2 }, // Green color for spouse connections
-            };
-            console.log('Adding spouse edge:', spouseEdge);
-            reactFlowEdges.push(spouseEdge);
+              // sourceHandle: "right",
+              // targetHandle: "left",
+            });
             addedReactFlowEdges.add(spouseEdgeKey);
           }
 
@@ -992,8 +409,7 @@ function PersonalTree() {
               source: id1,
               target: id2,
               minlen: 1,
-              weight: 1, // Lower weight for horizontal spacing
-              constraint: "same", // Keep on same rank (horizontal level)
+              constraint: "same",
             });
             addedDagreEdges.add(dagreSpouseEdgeKey);
           }
@@ -1001,366 +417,34 @@ function PersonalTree() {
       });
     });
 
-    // Enhanced family tree transformation complete
-    
-    console.log('Final reactFlowEdges:', reactFlowEdges);
-    console.log('Total edges created:', reactFlowEdges.length);
-    reactFlowEdges.forEach((edge, index) => {
-      console.log(`Edge ${index}:`, edge);
-    });
     return { reactFlowEdges, dagreEdges };
   };
 
-  // Custom Family Tree Layout Algorithm - Specifically designed for genealogical data
-  const applyFamilyTreeLayout = (nodes, people) => {
-    console.log('=== APPLYING CUSTOM FAMILY TREE LAYOUT ===');
-    console.log('Input people data:', people);
-    
-    const nodeWidth = 200;
-    const nodeHeight = 200;
-    const spouseSpacing = 300;  // Space between spouses
-    const generationSpacing = 300;  // Space between generations (increased for 200px height nodes)
-    const siblingSpacing = 220;  // Space between siblings
-    
-    // Step 1: Build family relationships map using original people data
-    const spouseMap = new Map();  // person -> spouse
-    const childrenMap = new Map(); // person -> [children]
-    const parentsMap = new Map();  // person -> [parents]
-    const generationLevels = new Map(); // person -> generation level
-    // Junction nodes will be positioned manually between spouses
-    
-    // Parse relationships directly from people data (more reliable than parsing edges)
-    people.forEach(person => {
-      console.log(`Processing relationships for: ${person.firstName} ${person.lastName} (${person.personId})`);
-      
-      person.relationships?.forEach(rel => {
-        const relType = rel.type.toLowerCase();
-        const relatedPersonId = rel.relatedPersonId;
-        
-        console.log(`  - ${relType} relationship with ${relatedPersonId}`);
-        
-        if (relType === 'spouse') {
-          spouseMap.set(person.personId, relatedPersonId);
-          console.log(`    Added spouse mapping: ${person.personId} -> ${relatedPersonId}`);
-        } else if (relType === 'parent') {
-          // This person is a child, relatedPersonId is their parent
-          if (!parentsMap.has(person.personId)) {
-            parentsMap.set(person.personId, []);
-          }
-          parentsMap.get(person.personId).push(relatedPersonId);
-          
-          // Add reverse mapping - parent has this person as child
-          if (!childrenMap.has(relatedPersonId)) {
-            childrenMap.set(relatedPersonId, []);
-          }
-          if (!childrenMap.get(relatedPersonId).includes(person.personId)) {
-            childrenMap.get(relatedPersonId).push(person.personId);
-          }
-          
-          console.log(`    Added parent mapping: child ${person.personId} -> parent ${relatedPersonId}`);
-          console.log(`    Added child mapping: parent ${relatedPersonId} -> child ${person.personId}`);
-        } else if (relType === 'child') {
-          // This person is a parent, relatedPersonId is their child
-          if (!childrenMap.has(person.personId)) {
-            childrenMap.set(person.personId, []);
-          }
-          if (!childrenMap.get(person.personId).includes(relatedPersonId)) {
-            childrenMap.get(person.personId).push(relatedPersonId);
-          }
-          
-          // Add reverse mapping - child has this person as parent
-          if (!parentsMap.has(relatedPersonId)) {
-            parentsMap.set(relatedPersonId, []);
-          }
-          parentsMap.get(relatedPersonId).push(person.personId);
-          
-          console.log(`    Added child mapping: parent ${person.personId} -> child ${relatedPersonId}`);
-          console.log(`    Added parent mapping: child ${relatedPersonId} -> parent ${person.personId}`);
-        }
-      });
-    });
-    
-    console.log('=== FAMILY RELATIONSHIPS PARSED ===');
-    console.log('Spouses found:', [...spouseMap.entries()]);
-    console.log('Children found:', [...childrenMap.entries()]);
-    console.log('Parents found:', [...parentsMap.entries()]);
-    
-    // Debug: Show what we found for your specific family
-    spouseMap.forEach((spouse, person) => {
-      console.log(`${person} is married to ${spouse}`);
-    });
-    
-    childrenMap.forEach((children, parent) => {
-      console.log(`${parent} has children: ${children.join(', ')}`);
-    });
-    
-    parentsMap.forEach((parents, child) => {
-      console.log(`${child} has parents: ${parents.join(', ')}`);
-    });
-    
-    // Step 2: Assign generation levels
-    const personNodes = nodes.filter(n => n.type === 'person');
-    const visited = new Set();
-    
-    // Find root nodes (no parents) and assign them to generation 0
-    const rootNodes = personNodes.filter(node => !parentsMap.has(node.id) || parentsMap.get(node.id).length === 0);
-    console.log('Root nodes found:', rootNodes.map(n => n.id));
-    
-    const assignGenerationLevel = (personId, level) => {
-      if (visited.has(personId)) return;
-      visited.add(personId);
-      
-      generationLevels.set(personId, level);
-      console.log(`Assigned generation ${level} to person ${personId}`);
-      
-      // Assign same level to spouse
-      const spouse = spouseMap.get(personId);
-      if (spouse && !visited.has(spouse)) {
-        generationLevels.set(spouse, level);
-        visited.add(spouse);
-        console.log(`Assigned generation ${level} to spouse ${spouse}`);
-      }
-      
-      // Assign next level to children
-      const children = childrenMap.get(personId) || [];
-      children.forEach(childId => {
-        if (!visited.has(childId)) {
-          assignGenerationLevel(childId, level + 1);
-        }
-      });
-    };
-    
-    // Start from root nodes
-    rootNodes.forEach(rootNode => {
-      assignGenerationLevel(rootNode.id, 0);
-    });
-    
-    // Handle any remaining unvisited nodes
-    personNodes.forEach(node => {
-      if (!visited.has(node.id)) {
-        console.log(`Assigning default generation 0 to unvisited node: ${node.id}`);
-        assignGenerationLevel(node.id, 0);
-      }
-    });
-    
-    // Junction nodes are positioned manually between spouses (no generation assignment needed)
-    
-    console.log('Generation levels:', [...generationLevels.entries()]);
-    
-    // Step 3: Position nodes by generation
-    const generationGroups = new Map();
-    
-    // Group nodes by generation
-    generationLevels.forEach((level, personId) => {
-      if (!generationGroups.has(level)) {
-        generationGroups.set(level, []);
-      }
-      generationGroups.get(level).push(personId);
-    });
-    
-    console.log('Generation groups:', [...generationGroups.entries()]);
-    
-    // Step 4: Position nodes
-    const layoutedNodes = [...nodes];
-    
-    // Calculate optimal starting X to center the tree
-    const maxGenerationSize = Math.max(...Array.from(generationGroups.values()).map(gen => gen.length));
-    const estimatedTreeWidth = maxGenerationSize * (spouseSpacing + siblingSpacing);
-    const startX = Math.max(100, (800 - estimatedTreeWidth) / 2); // Center the tree better
-    
-    // Sort generations from oldest to youngest
-    const sortedGenerations = [...generationGroups.keys()].sort((a, b) => a - b);
-    
-    sortedGenerations.forEach(generation => {
-      const generationMembers = generationGroups.get(generation);
-      const generationY = 100 + generation * generationSpacing;
-      
-      // Group spouses together
-      const spousePairs = [];
-      const singles = [];
-      const processed = new Set();
-      
-      generationMembers.forEach(personId => {
-        if (processed.has(personId)) return;
-        
-        const spouse = spouseMap.get(personId);
-        if (spouse && generationMembers.includes(spouse)) {
-          spousePairs.push([personId, spouse]);
-          processed.add(personId);
-          processed.add(spouse);
-        } else {
-          singles.push(personId);
-          processed.add(personId);
-        }
-      });
-      
-      console.log(`Generation ${generation}: ${spousePairs.length} spouse pairs, ${singles.length} singles`);
-      
-      let currentX = startX;
-      
-      // Position spouse pairs
-      spousePairs.forEach(([spouse1, spouse2]) => {
-        const spouse1Node = layoutedNodes.find(n => n.id === spouse1);
-        const spouse2Node = layoutedNodes.find(n => n.id === spouse2);
-        
-        if (spouse1Node && spouse2Node) {
-          // Position spouses side by side
-          spouse1Node.position = { x: currentX, y: generationY };
-          spouse2Node.position = { x: currentX + spouseSpacing, y: generationY };
-          
-          console.log(`Positioned spouse pair: ${spouse1} at (${currentX}, ${generationY}), ${spouse2} at (${currentX + spouseSpacing}, ${generationY})`);
-          
-          currentX += spouseSpacing + siblingSpacing;
-        }
-      });
-      
-      // Position singles
-      singles.forEach(personId => {
-        const personNode = layoutedNodes.find(n => n.id === personId);
-        if (personNode) {
-          personNode.position = { x: currentX, y: generationY };
-          console.log(`Positioned single: ${personId} at (${currentX}, ${generationY})`);
-          currentX += siblingSpacing;
-        }
-      });
-    });
-    
-    // Position T-junction nodes close to family members using custom algorithm
-    const junctionNodes = layoutedNodes.filter(n => n.type === 'marriage');
-    console.log('Positioning T-junction nodes with custom family tree layout:', junctionNodes.length);
-    
-    junctionNodes.forEach(junction => {
-      if (junction.data?.isHorizontalJunction && junction.data?.spousePair) {
-        // Horizontal junction - position exactly between spouses at their Y level
-        const spouse1Node = layoutedNodes.find(n => n.id === junction.data.spousePair.spouse1);
-        const spouse2Node = layoutedNodes.find(n => n.id === junction.data.spousePair.spouse2);
-        
-        if (spouse1Node && spouse2Node) {
-          // Position junction shifted left to make junction-to-Annabel line longer
-          const centerX = spouse1Node.position.x + nodeWidth/2 + (spouse2Node.position.x - spouse1Node.position.x) / 2 - 30;
-          // Position junction at exact same vertical center as spouses for perfectly straight horizontal line
-          const sharedY = spouse1Node.position.y + (nodeHeight / 2) - 17; // Adjusted 17px higher (raised by 1px)
-          
-          // Double-check both spouses are at exact same Y (they should be from positioning code)
-          if (Math.abs(spouse1Node.position.y - spouse2Node.position.y) > 0.1) {
-            console.warn(`Spouses not at same Y level: ${spouse1Node.position.y} vs ${spouse2Node.position.y}`);
-          }
-          
-          junction.position = { x: centerX, y: sharedY };
-          console.log(`Custom layout - Positioned horizontal junction ${junction.id} at (${centerX}, ${sharedY})`);
-        }
-      } else if (junction.data?.isVerticalJunction && junction.data?.spousePair) {
-        // Vertical junction - position just below the horizontal junction
-        const hJunctionId = junction.id.replace('v-junction-', 'h-junction-');
-        const horizontalJunction = layoutedNodes.find(n => n.id === hJunctionId);
-        
-        if (horizontalJunction) {
-          const junctionY = horizontalJunction.position.y + 60; // 60px below horizontal junction
-          
-          junction.position = { 
-            x: horizontalJunction.position.x, 
-            y: junctionY
-          };
-          console.log(`Custom layout - Positioned vertical junction ${junction.id} at (${junction.position.x}, ${junctionY})`);
-        }
-      } else {
-        // Legacy junction positioning for backward compatibility
-        if (junction.id.includes('h-junction-')) {
-          const pairKey = junction.id.replace('h-junction-', '');
-          const [spouse1Id, spouse2Id] = pairKey.split('-');
-          
-          const spouse1Node = layoutedNodes.find(n => n.id === spouse1Id);
-          const spouse2Node = layoutedNodes.find(n => n.id === spouse2Id);
-          
-          if (spouse1Node && spouse2Node) {
-            const centerX = spouse1Node.position.x + nodeWidth/2 + (spouse2Node.position.x - spouse1Node.position.x) / 2 - 30;
-            const sharedY = spouse1Node.position.y + (nodeHeight / 2) - 17; // Adjusted 17px higher (raised by 1px)
-            junction.position = { x: centerX, y: sharedY };
-          }
-        }
-      }
-    });
-    
-    // Step 5: Adjust children positioning to be equidistant from junctions
-    spouseMap.forEach((spouse, person) => {
-      const pairKey = [person, spouse].sort().join('-');
-      const horizontalJunction = layoutedNodes.find(n => n.id === `h-junction-${pairKey}`);
-      
-      if (horizontalJunction) {
-        const children = [...(childrenMap.get(person) || []), ...(childrenMap.get(spouse) || [])];
-        const uniqueChildren = [...new Set(children)]; // Remove duplicates
-        
-        if (uniqueChildren.length > 0) {
-          console.log(`Positioning ${uniqueChildren.length} children around junction at x=${horizontalJunction.position.x}`);
-          
-          // Position children centered around the junction (no odd/even condition)
-          const childSpacing = 220; // Same as siblingSpacing
-          const numChildren = uniqueChildren.length;
-          
-          // Always center children around the junction
-          const totalWidth = (numChildren - 1) * childSpacing;
-          const startX = horizontalJunction.position.x - totalWidth / 2;
-          console.log(`Positioning ${numChildren} children centered around junction at x=${horizontalJunction.position.x}`);
-          console.log(`Total width: ${totalWidth}, startX: ${startX}`);
-          
-          uniqueChildren.forEach((childId, index) => {
-            const childNode = layoutedNodes.find(n => n.id === childId);
-            if (childNode) {
-              const childX = startX + index * childSpacing;
-              console.log(`DEBUG: Junction at x=${horizontalJunction.position.x}, startX=${startX}, index=${index}, childSpacing=${childSpacing}`);
-              console.log(`DEBUG: Calculated childX = ${startX} + ${index} * ${childSpacing} = ${childX}`);
-              childNode.position = { x: childX, y: childNode.position.y }; // Keep same Y, adjust X
-              console.log(`Repositioned child ${childId} at (${childX}, ${childNode.position.y}) - should be directly below junction`);
-            }
-          });
-        }
-      }
-    });
-    
-    console.log('=== CUSTOM FAMILY TREE LAYOUT COMPLETE ===');
-    console.log('Final layouted nodes:', layoutedNodes.length);
-    
-    return { layoutedNodes, reactFlowEdges: [] }; // Return empty reactFlowEdges since we'll use the original ones
-  };
-  
   const applyLayout = (nodes, { reactFlowEdges, dagreEdges }, direction = "TB") => {
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
 
     dagreGraph.setGraph({
-      rankdir: direction, // TB = Top to Bottom (parents above, children below)
-      nodesep: 150, // Horizontal spacing between nodes on same level
-      ranksep: 200, // Vertical spacing between generations
-      align: "UL", // Align nodes to upper left
-      marginx: 50,
-      marginy: 50,
+      rankdir: direction,
+      nodesep: 50,
+      ranksep: 100,
+      // ranker: "tight-tree",
     });
 
     const nodeWidth = 200;
-    const nodeHeight = 200;
+    const nodeHeight = 150;
 
     nodes.forEach((node) => {
       dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
     });
 
     dagreEdges.forEach((edge) => {
-      const edgeOptions = { 
-        minlen: edge.minlen || 1,
-        weight: edge.weight || 1
-      };
-      
-      // Special handling for spouse relationships to keep them on the same rank
-      if (edge.constraint === "same") {
-        edgeOptions.minlen = 1;
-        edgeOptions.weight = 0.1; // Very low weight for spouses
-      }
-      
-      dagreGraph.setEdge(edge.source, edge.target, edgeOptions);
+      dagreGraph.setEdge(edge.source, edge.target, { minlen: edge.minlen || 1 });
     });
 
     dagre.layout(dagreGraph);
 
-    let layoutedNodes = nodes.map((node) => {
+    const layoutedNodes = nodes.map((node) => {
       const nodeWithPosition = dagreGraph.node(node.id);
       return {
         ...node,
@@ -1370,40 +454,6 @@ function PersonalTree() {
         },
       };
     });
-    
-    // Post-process to ensure spouses are side by side
-    const spousePairs = new Map();
-    reactFlowEdges.forEach(edge => {
-      if (edge.style?.stroke === '#4F6F52' && edge.sourceHandle === 'right' && edge.targetHandle === 'left') {
-        // This is a spouse edge
-        const spouse1Id = edge.source;
-        const spouse2Id = edge.target;
-        spousePairs.set(`${spouse1Id}-${spouse2Id}`, { spouse1: spouse1Id, spouse2: spouse2Id });
-      }
-    });
-    
-    // Adjust spouse positions to ensure they're properly side by side
-    spousePairs.forEach(({ spouse1, spouse2 }) => {
-      const spouse1Node = layoutedNodes.find(n => n.id === spouse1);
-      const spouse2Node = layoutedNodes.find(n => n.id === spouse2);
-      
-      if (spouse1Node && spouse2Node) {
-        // Force both spouses to the same Y level
-        const targetY = Math.min(spouse1Node.position.y, spouse2Node.position.y);
-        spouse1Node.position.y = targetY;
-        spouse2Node.position.y = targetY;
-        
-        // Ensure proper horizontal spacing
-        const centerX = (spouse1Node.position.x + spouse2Node.position.x) / 2;
-        const spouseSpacing = nodeWidth + 100;
-        
-        spouse1Node.position.x = centerX - spouseSpacing / 2;
-        spouse2Node.position.x = centerX + spouseSpacing / 2;
-      }
-    });
-
-    // Junction positioning is now handled by the custom family tree layout
-    console.log('Junction positioning delegated to custom family tree layout');
 
     return { layoutedNodes, reactFlowEdges };
   };
@@ -1448,10 +498,13 @@ function PersonalTree() {
         console.log("People data:", fetchedPeople);
         setPeople(fetchedPeople);
 
-        // Initialize FamilyTreeJS with the fetched data
-        setTimeout(() => {
-          initializeFamilyTree(fetchedPeople);
-        }, 100); // Small delay to ensure DOM is ready
+        const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool);
+        const { reactFlowEdges, dagreEdges } = transformPeopleToEdges(fetchedPeople);
+
+        const { layoutedNodes, reactFlowEdges: finalReactFlowEdges } = applyLayout(newNodes, { reactFlowEdges, dagreEdges });
+
+        setNodes(layoutedNodes);
+        setEdges(finalReactFlowEdges);
       } else {
         console.error("No treeId available to fetch persons.");
       }
@@ -1684,239 +737,19 @@ function PersonalTree() {
     }
   };
 
-  // New toolbar functions
-
-  // Auto layout toggle disabled - permanent manual dragging mode
-  // const handleToggleAutoLayout = () => {
-  //   setAutoLayout(prev => !prev);
-  //   if (!autoLayout && people.length > 0) {
-  //     const currentNodes = transformPeopleToNodes(people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTree);
-  //     const { reactFlowEdges, dagreEdges, marriageJunctions } = transformPeopleToEdgesEnhanced(people);
-  //     const allNodes = [...currentNodes, ...marriageJunctions];
-  //     const { layoutedNodes } = applyFamilyTreeLayout(allNodes, people);
-  //     setNodes(layoutedNodes);
-  //     setEdges(reactFlowEdges);
-  //   }
-  // };
-
-  const handleNodeDrag = (event, node) => {
-    // This will be handled by ReactFlow's built-in drag handling
-    // We just need to make sure we don't apply auto-layout when manual positioning is happening
-  };
-
-  // Edit modal functions
-  const closeEditModal = () => {
-    setIsEditModalOpen(false);
-    setEditPersonData(null);
-    setEditConnectionPersonId("");
-    setEditRelationshipType("");
-  };
-
-  const handleEditInputChange = (e) => {
-    const { name, value } = e.target;
-    if (name === "status" && value === "living") {
-      setEditPersonData((prev) => ({
-        ...prev,
-        [name]: value,
-        dateOfDeath: "",
-        placeOfDeath: "",
-      }));
-    } else {
-      setEditPersonData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-  };
-
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    if (!editPersonData) return;
-
-    setIsLoading(true);
-    try {
-      // Prepare clean person data for update (remove any extra fields)
-      const cleanPersonData = {
-        firstName: editPersonData.firstName?.trim(),
-        middleName: editPersonData.middleName?.trim() || "",
-        lastName: editPersonData.lastName?.trim(),
-        birthDate: editPersonData.birthDate || null,
-        birthPlace: editPersonData.birthPlace?.trim() || "",
-        gender: editPersonData.gender,
-        status: editPersonData.status || "living",
-        dateOfDeath: editPersonData.status === "deceased" ? (editPersonData.dateOfDeath || null) : null,
-        placeOfDeath: editPersonData.status === "deceased" ? (editPersonData.placeOfDeath?.trim() || "") : "",
-      };
-
-      console.log("Attempting to update person with data:", cleanPersonData);
-      console.log("Person ID:", editPersonData.personId);
-
-      // Update the person's basic information
-      const response = await axios.put(`http://localhost:3001/api/persons/${editPersonData.personId}`, cleanPersonData);
-      console.log(`Successfully updated person ${editPersonData.personId}:`, response.data);
-
-      // Handle new connection if specified
-      if (editConnectionPersonId && editRelationshipType) {
-        let sourceRelationshipType, targetRelationshipType;
-        
-        if (editRelationshipType === "parent") {
-          sourceRelationshipType = "child";
-          targetRelationshipType = "parent";
-        } else if (editRelationshipType === "child") {
-          sourceRelationshipType = "parent";
-          targetRelationshipType = "child";
-        } else if (editRelationshipType === "spouse") {
-          sourceRelationshipType = "spouse";
-          targetRelationshipType = "spouse";
-        }
-
-        try {
-          // Add relationship from edited person to selected person
-          await axios.put(`http://localhost:3001/api/persons/${editPersonData.personId}`, {
-            relationships: [
-              {
-                relatedPersonId: editConnectionPersonId,
-                type: targetRelationshipType,
-              },
-            ],
-          });
-          console.log(`Successfully added relationship to person ${editPersonData.personId}`);
-
-          // Add reciprocal relationship from selected person to edited person
-          await axios.put(`http://localhost:3001/api/persons/${editConnectionPersonId}`, {
-            relationships: [
-              {
-                relatedPersonId: editPersonData.personId,
-                type: sourceRelationshipType,
-              },
-            ],
-          });
-          console.log(`Successfully added reciprocal relationship to person ${editConnectionPersonId}`);
-        } catch (relationshipError) {
-          console.error("Error creating relationships:", relationshipError);
-          // Don't fail the whole operation if relationships fail
-          alert(`Person updated successfully, but failed to create relationship: ${relationshipError.response?.data?.message || relationshipError.message}`);
-        }
-      }
-
-      closeEditModal();
-      
-      // Refresh the tree
-      if (!isCurrentUsersTree) {
-        await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-      } else {
-        await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-      }
-    } catch (error) {
-      console.error("Error updating person:", error);
-      alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Close remove relationship modal
-  const closeRemoveRelationshipModal = () => {
-    setIsRemoveRelationshipModalOpen(false);
-    setSelectedPersonForRelationshipRemoval(null);
-  };
-
-  // Handle relationship removal
-  const handleRemoveRelationshipSubmit = async (personId, relationshipToRemove) => {
-    setIsLoading(true);
-    try {
-      console.log('Removing relationship:', relationshipToRemove, 'from person:', personId);
-      
-      // Remove relationship from the selected person
-      await axios.patch(`http://localhost:3001/api/persons/relationship/${personId}`, {
-        relationshipToRemove: relationshipToRemove
-      });
-      
-      // Remove reciprocal relationship
-      const reciprocalRelationshipType = getReciprocalRelationshipType(relationshipToRemove.type);
-      await axios.patch(`http://localhost:3001/api/persons/relationship/${relationshipToRemove.relatedPersonId}`, {
-        relationshipToRemove: {
-          relatedPersonId: personId,
-          type: reciprocalRelationshipType
-        }
-      });
-      
-      console.log('Successfully removed relationship');
-      closeRemoveRelationshipModal();
-      
-      // Refresh the tree
-      if (!isCurrentUsersTree) {
-        await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
-      } else {
-        await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
-      }
-    } catch (error) {
-      console.error('Error removing relationship:', error);
-      alert(`Failed to remove relationship: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Get reciprocal relationship type
-  const getReciprocalRelationshipType = (relationshipType) => {
-    switch (relationshipType.toLowerCase()) {
-      case 'parent': return 'child';
-      case 'child': return 'parent';
-      case 'spouse': return 'spouse';
-      default: return relationshipType;
-    }
-  };
-
-  // Get available people for connection (exclude the person being edited)
-  const availableConnections = people.filter(person => 
-    person.personId !== editPersonData?.personId && 
-    person.firstName && 
-    person.lastName
-  );
-
   return (
     <Layout>
-      <div className="min-h-[97vh] relative overflow-hidden pt-8" style={{ backgroundColor: "#D9D9D9" }}>
-        {/* Top Right Add Node Button */}
-        <div className="fixed top-20 right-6 z-30">
-          {/* White panel background */}
-          <div className="bg-white rounded-lg p-3 shadow-lg border border-gray-200">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="flex items-center justify-center space-x-2 text-white px-3 py-2 rounded-lg hover:opacity-90 transition-colors shadow-md text-sm"
-              style={{ backgroundColor: '#4F6F52' }}
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Node</span>
-            </button>
-          </div>
-        </div>
-
+      <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
         {/* Main Tree Area */}
-        <div 
-          className="w-full"
-          style={{ 
-            height: "calc(100vh - 60px)",
-            position: "absolute",
-            top: "40px",
-            left: "0",
-            right: "0"
-          }}
-        >
-          <div 
-            ref={familyTreeRef}
-            id="family-tree-container"
-            style={{ 
-              width: "calc(100% - 20px)", 
-              height: "calc(100% - 20px)",
-              backgroundColor: "white",
-              borderRadius: "8px",
-              margin: "0 10px",
-              border: "1px solid #e5e7eb",
-              position: "relative"
-            }}
-          />
+        <div className="flex items-center justify-center" style={{ height: "calc(100vh - 64px)" }}>
+          <ReactFlowProvider>
+            <div style={{ width: "100%", height: "100%" }}>
+              <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
+                <Background />
+                <Controls />
+              </ReactFlow>
+            </div>
+          </ReactFlowProvider>
         </div>
         {/* Loading Spinner */}
         {isLoading && (
@@ -1973,322 +806,6 @@ function PersonalTree() {
           </div>
         )}
 
-        {/* Edit Person Modal */}
-        {isEditModalOpen && editPersonData && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-[70]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeEditModal}>
-            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto relative" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-800">
-                  Edit {editPersonData.firstName} {editPersonData.lastName}
-                </h2>
-                <button
-                  onClick={closeEditModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveEdit} className="space-y-4">
-                {/* Connection Section */}
-                <div className="border-b border-gray-200 pb-4">
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Add New Connection (Optional)</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Connect to Person</label>
-                      <select
-                        value={editConnectionPersonId}
-                        onChange={(e) => setEditConnectionPersonId(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                      >
-                        <option value="">Select a person (optional)</option>
-                        {availableConnections.map(person => (
-                          <option key={person.personId} value={person.personId}>
-                            {person.firstName} {person.lastName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Relationship Type</label>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="editRelationship"
-                            value="parent"
-                            checked={editRelationshipType === "parent"}
-                            onChange={(e) => setEditRelationshipType(e.target.value)}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Parent</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="editRelationship"
-                            value="child"
-                            checked={editRelationshipType === "child"}
-                            onChange={(e) => setEditRelationshipType(e.target.value)}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Child</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="editRelationship"
-                            value="spouse"
-                            checked={editRelationshipType === "spouse"}
-                            onChange={(e) => setEditRelationshipType(e.target.value)}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Spouse</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Personal Information */}
-                <div>
-                  <h3 className="text-sm font-medium text-gray-700 mb-3">Personal Information</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* First Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                      <input
-                        type="text"
-                        name="firstName"
-                        value={editPersonData.firstName || ""}
-                        onChange={handleEditInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                        required
-                      />
-                    </div>
-
-                    {/* Last Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                      <input
-                        type="text"
-                        name="lastName"
-                        value={editPersonData.lastName || ""}
-                        onChange={handleEditInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                        required
-                      />
-                    </div>
-
-                    {/* Middle Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-                      <input
-                        type="text"
-                        name="middleName"
-                        value={editPersonData.middleName || ""}
-                        onChange={handleEditInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                      />
-                    </div>
-
-                    {/* Gender */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="gender"
-                            value="male"
-                            checked={editPersonData.gender === "male"}
-                            onChange={handleEditInputChange}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Male</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="gender"
-                            value="female"
-                            checked={editPersonData.gender === "female"}
-                            onChange={handleEditInputChange}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Female</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Birth Date */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Birth Date</label>
-                      <input
-                        type="date"
-                        name="birthDate"
-                        value={editPersonData.birthDate || ""}
-                        onChange={handleEditInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                      />
-                    </div>
-
-                    {/* Birth Place */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Birth Place</label>
-                      <input
-                        type="text"
-                        name="birthPlace"
-                        value={editPersonData.birthPlace || ""}
-                        onChange={handleEditInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="status"
-                            value="living"
-                            checked={editPersonData.status === "living"}
-                            onChange={handleEditInputChange}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Living</span>
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="status"
-                            value="deceased"
-                            checked={editPersonData.status === "deceased"}
-                            onChange={handleEditInputChange}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-700">Deceased</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Death Information - Only show if deceased */}
-                    {editPersonData.status === "deceased" && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Date of Death</label>
-                          <input
-                            type="date"
-                            name="dateOfDeath"
-                            value={editPersonData.dateOfDeath || ""}
-                            onChange={handleEditInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Place of Death</label>
-                          <input
-                            type="text"
-                            name="placeOfDeath"
-                            value={editPersonData.placeOfDeath || ""}
-                            onChange={handleEditInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={closeEditModal}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center space-x-2"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                    <span>Save Changes</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Remove Relationship Modal */}
-        {isRemoveRelationshipModalOpen && selectedPersonForRelationshipRemoval && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-[70]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeRemoveRelationshipModal}>
-            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto relative" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-800">
-                  Remove Relationship
-                </h2>
-                <button
-                  onClick={closeRemoveRelationshipModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="mb-4">
-                <p className="text-gray-700 mb-4">
-                  Select a relationship to remove for <strong>{selectedPersonForRelationshipRemoval.firstName} {selectedPersonForRelationshipRemoval.lastName}</strong>:
-                </p>
-                
-                {selectedPersonForRelationshipRemoval.relationships && selectedPersonForRelationshipRemoval.relationships.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedPersonForRelationshipRemoval.relationships.map((relationship, index) => {
-                      const relatedPerson = people.find(p => p.personId === relationship.relatedPersonId);
-                      return (
-                        <div key={index} className="flex items-center justify-between p-3 border border-gray-200 rounded-md">
-                          <div>
-                            <span className="font-medium">
-                              {relatedPerson ? `${relatedPerson.firstName} ${relatedPerson.lastName}` : 'Unknown Person'}
-                            </span>
-                            <span className="text-sm text-gray-500 ml-2">({relationship.type})</span>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveRelationshipSubmit(selectedPersonForRelationshipRemoval.personId, relationship)}
-                            className="px-3 py-1 bg-red-500 text-white text-sm rounded-md hover:bg-red-600 transition-colors"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">
-                    This person has no relationships to remove.
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  onClick={closeRemoveRelationshipModal}
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* May not work? clicking outside of action menu closes menu */}
         {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />}
         {/* Overlay for sidebar */}
@@ -2319,13 +836,8 @@ function PersonalTree() {
 
         {/* Form Content */}
         {activeTab === "Add member" && (
-          <div className="p-6 space-y-4 overflow-y-auto h-full pb-16 pt-4">
-            
-
-
-            {/* Add Person Form */}
-            <form onSubmit={handleAddPerson}>
-              <div className="space-y-3">
+          <form onSubmit={handleAddPerson}>
+            <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
               {/* Relationship */}
               {!isEditMode && (
                 <>
@@ -2361,7 +873,7 @@ function PersonalTree() {
                       </div>
                       <span className="ml-2 text-sm text-gray-700">Child</span>
                     </label>
-                    {/* Spouse */}
+                    {/* Spouse
                     <label className="flex items-center">
                       <div className="relative">
                         <input type="radio" name="relationship" value="spouse" checked={formData.relationship === "spouse"} onChange={handleInputChange} className="sr-only" />
@@ -2371,7 +883,7 @@ function PersonalTree() {
                         />
                       </div>
                       <span className="ml-2 text-sm text-gray-700">Spouse</span>
-                    </label>
+                    </label> */}
                   </div>
                 </>
               )}
@@ -2496,7 +1008,7 @@ function PersonalTree() {
                 </div>
               </div>
 
-              {formData.status === "deceased" && (
+              {formData.status === "Deceased" && (
                 <div>
                   {/* Date of Death */}
                   <div className="pb-3">
@@ -2525,21 +1037,20 @@ function PersonalTree() {
                 </div>
               )}
 
-                  {/* Add/Edit Person Button */}
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
-                      style={{ backgroundColor: "#365643" }}
-                    >
-                      {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                      <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
-                    </button>
-                  </div>
-                </div>
-              </form>
+              {/* Add/Edit Person Button */}
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  // onClick={handleAddPerson}
+                  className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                  style={{ backgroundColor: "#365643" }}
+                >
+                  {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                  <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
+                </button>
+              </div>
             </div>
-          // </div>
+          </form>
         )}
 
         {/* Connections Tab */}

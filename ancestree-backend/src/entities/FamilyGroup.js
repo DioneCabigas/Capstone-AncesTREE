@@ -1,7 +1,6 @@
 class FamilyGroup {
   constructor(userId, treeId, name, description, createdAt = new Date()) {
     this._userId = userId;
-    this._owner = userId; // Explicit owner field (same as userId for backwards compatibility)
     this._treeId = treeId;
     this._name = name;
     this._description = description;
@@ -10,9 +9,6 @@ class FamilyGroup {
 
   get userId() {
     return this._userId;
-  }
-  get owner() {
-    return this._owner;
   }
   get treeId() {
     return this._treeId;
@@ -29,9 +25,6 @@ class FamilyGroup {
 
   set userId(value) {
     this._userId = value;
-  }
-  set owner(value) {
-    this._owner = value;
   }
   set treeId(value) {
     this._treeId = value;
@@ -52,7 +45,6 @@ class FamilyGroup {
   toJSON() {
     return {
       userId: this._userId,
-      owner: this._owner,
       treeId: this._treeId,
       name: this._name,
       description: this._description,

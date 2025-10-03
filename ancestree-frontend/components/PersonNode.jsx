@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Handle, Position } from "reactflow";
-import { User, MoreHorizontal, Plus, Edit3, Trash2, Venus, Mars, UserPlus, Unlink } from "lucide-react";
+import { User, MoreHorizontal, Plus, Edit3, Trash2, Venus, Mars } from "lucide-react";
 
 export default function PersonNode({ data }) {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -32,79 +32,12 @@ export default function PersonNode({ data }) {
     }
   };
 
-  // Check if this is an empty node
-  const isEmpty = data.isEmpty;
-  const isConnected = data.isConnected;
-  
   return (
-    <div className={`relative w-36 rounded-xl shadow-sm border p-4 ${
-      isEmpty 
-        ? isConnected 
-          ? "bg-yellow-50 border-yellow-300 border-dashed" 
-          : "bg-gray-50 border-gray-300 border-dashed"
-        : "bg-white border-gray-200"
-    }`}>
-      {/* Enhanced handles for family tree connections */}
-      
-      {/* Top handles - for parent-child vertical connections */}
-      <Handle 
-        type="source" 
-        position="top" 
-        id="top"
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-      />
-      <Handle 
-        type="target" 
-        position="top" 
-        id="top"
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ opacity: 0 }}
-      />
-      
-      {/* Bottom handles - for parent-child vertical connections */}
-      <Handle 
-        type="source" 
-        position="bottom" 
-        id="bottom"
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-      />
-      <Handle 
-        type="target" 
-        position="bottom" 
-        id="bottom"
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ opacity: 0 }}
-      />
-      
-      {/* Left handles - for spouse and child connections */}
-      <Handle 
-        type="source" 
-        position="left" 
-        id="left"
-        className="w-4 h-4 bg-red-500 border-2 border-white" 
-      />
-      <Handle 
-        type="target" 
-        position="left" 
-        id="left"
-        className="w-4 h-4 bg-red-500 border-2 border-white" 
-        style={{ opacity: 0 }}
-      />
-      
-      {/* Right handles - for spouse and child connections */}
-      <Handle 
-        type="source" 
-        position="right" 
-        id="right"
-        className="w-4 h-4 bg-red-500 border-2 border-white" 
-      />
-      <Handle 
-        type="target" 
-        position="right" 
-        id="right"
-        className="w-4 h-4 bg-red-500 border-2 border-white" 
-        style={{ opacity: 0 }}
-      />
+    <div className="relative w-36 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <Handle type="target" position="top" className="w-2 h-2 bg-blue-500" />
+      <Handle type="source" position="bottom" className="w-2 h-2 bg-blue-500" />
+      {/* <Handle type="target" position="left" id="left" className="w-2 h-2 bg-blue-500" />
+      <Handle type="source" position="right" id="right" className="w-2 h-2 bg-blue-500" /> */}
 
       {/* Three dots button */}
       {data.isCurrentUsersTree === true && (
@@ -118,36 +51,10 @@ export default function PersonNode({ data }) {
 
       {/* User content */}
       <div className="flex flex-col items-center text-center">
-        {isEmpty ? (
-          // Empty node display
-          <>
-            <div className={`w-13 h-13 rounded-full flex items-center justify-center mb-3 ${
-              isConnected ? "bg-yellow-200" : "bg-gray-200"
-            }`}>
-              <UserPlus className={`w-7 h-7 ${
-                isConnected ? "text-yellow-600" : "text-gray-500"
-              }`} />
-            </div>
-            <h3 className={`text-sm font-medium ${
-              isConnected ? "text-yellow-700" : "text-gray-500"
-            }`}>
-              {isConnected ? "Connected" : "Empty Node"}
-            </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              {isConnected ? "Add details" : "Connect first"}
-            </p>
-          </>
-        ) : (
-          // Regular node display
-          <>
-            <div className={`w-13 h-13 rounded-full flex items-center justify-center mb-3 ${getGenderBackgroundColor(data.gender)}`}>
-              {getGenderIcon(data.gender)}
-            </div>
-            <h3 className="text-sm font-medium text-gray-800">
-              {data.firstName} {data.lastName}
-            </h3>
-          </>
-        )}
+        <div className={`w-13 h-13 rounded-full flex items-center justify-center mb-3 ${getGenderBackgroundColor(data.gender)}`}>{getGenderIcon(data.gender)}</div>
+        <h3 className="text-sm font-medium text-gray-800">
+          {data.firstName} {data.lastName}
+        </h3>
       </div>
 
       {/* Action Buttons */}
@@ -184,18 +91,6 @@ export default function PersonNode({ data }) {
             className="w-8 h-8 bg-white rounded-full shadow-sm border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
           >
             <Edit3 className="w-4 h-4 text-gray-600" />
-          </button>
-
-          {/* Remove Relationship button */}
-          <button
-            onClick={() => {
-              data.handleRemoveRelationship(data);
-              setActionMenuOpen(false);
-            }}
-            className="w-8 h-8 bg-orange-500 rounded-full shadow-sm border border-orange-600 flex items-center justify-center hover:bg-orange-600 transition-colors"
-            title="Remove relationship"
-          >
-            <Unlink className="w-4 h-4 text-white" />
           </button>
 
           {/* Delete Person button */}

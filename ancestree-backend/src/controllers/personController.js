@@ -76,20 +76,6 @@ exports.getPeopleByTreeId = async (req, res) => {
   }
 };
 
-exports.getPeopleByGroupTreeId = async (req, res) => {
-  try {
-    const groupTreeId = req.params.groupTreeId;
-    const people = await personService.getPeopleByGroupTreeId(groupTreeId);
-    if (people.length === 0) {
-      return res.status(404).json({ message: "No people found in this group tree." });
-    }
-    res.status(200).json(people);
-  } catch (err) {
-    console.error("Error getting people by group tree ID:", err);
-    res.status(500).json({ message: "Failed to get people for group tree" });
-  }
-};
-
 exports.updatePerson = async (req, res) => {
   try {
     const personId = req.params.personId;
