@@ -70,6 +70,19 @@ exports.deleteGroup = async (req, res) => {
   }
 };
 
+exports.leaveGroup = async (req, res) => {
+  const { groupId, userId } = req.body;
+
+  try {
+    const result = await familyGroupService.leaveGroup(groupId, userId);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error leaving group:', error);
+    res.status(400).json({ message: error.message });
+  }
+};
+
+
 exports.getGroupByTreeId = async (req, res) => {
   const { treeId } = req.params;
 

@@ -1,14 +1,14 @@
-'use client'
+"use client";
 
-import Link from 'next/link';
-import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Navbar from '@/components/Navbar';
-import axios from 'axios';
-import { ArrowLeft, Edit, User, Users, ChevronDown, Check, X as XMark } from 'lucide-react';
+import Link from "next/link";
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Navbar from "@/components/Navbar";
+import axios from "axios";
+import { ArrowLeft, Edit, User, Users, ChevronDown, Check, X as XMark } from "lucide-react";
 import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import InviteMembersModal from '@/components/InviteMembersModal'; // Import the new modal component
+import InviteMembersModal from "@/components/InviteMembersModal"; // Import the new modal component
 
 function ViewGroupPage() {
   const { groupId } = useParams();
@@ -17,24 +17,25 @@ function ViewGroupPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editedDescription, setEditedDescription] = useState('');
+  const [editedDescription, setEditedDescription] = useState("");
   const [members, setMembers] = useState([]);
-  const [startingPerson, setStartingPerson] = useState('Loading...');
+  const [startingPerson, setStartingPerson] = useState("Loading...");
   const [isPrivate, setIsPrivate] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const [currentUserName, setCurrentUserName] = useState('');
+  const [currentUserName, setCurrentUserName] = useState("");
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false); // New state for invite modal
+  const [isLeaving, setIsLeaving] = useState(false);
 
-  const BACKEND_BASE_URL = 'http://localhost:3001';
-  const API_FAMILY_GROUPS_PATH = '/api/family-groups';
-  const API_FAMILY_GROUP_MEMBERS_PATH = '/api/family-group-members';
-  const API_USERS_PATH = '/api/user'; // Added for fetching user details for members
+  const BACKEND_BASE_URL = "http://localhost:3001";
+  const API_FAMILY_GROUPS_PATH = "/api/family-groups";
+  const API_FAMILY_GROUP_MEMBERS_PATH = "/api/family-group-members";
+  const API_USERS_PATH = "/api/user"; // Added for fetching user details for members
 
   // Function to get initials for avatars
   const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return 'N/A';
-    return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
+    if (!firstName && !lastName) return "N/A";
+    return `${firstName ? firstName.charAt(0) : ""}${lastName ? lastName.charAt(0) : ""}`.toUpperCase();
   };
 
   // Function to fetch group details and all its members with their user details
@@ -52,7 +53,7 @@ function ViewGroupPage() {
       const groupResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`);
       if (groupResponse.status === 200) {
         setGroup(groupResponse.data);
-        setEditedDescription(groupResponse.data.description || '');
+        setEditedDescription(groupResponse.data.description || "");
         // Initialize isPrivate state from fetched group data
         setIsPrivate(groupResponse.data.isPrivate || false);
       } else {
@@ -62,21 +63,20 @@ function ViewGroupPage() {
       // Fetch members of the group
       const membersResponse = await axios.get(`${BACKEND_BASE_URL}${API_FAMILY_GROUP_MEMBERS_PATH}/group/${groupId}`);
       if (membersResponse.status === 200) {
-          // For each member, fetch their full user details to display names and other info
-          const membersWithDetails = await Promise.all(
-            membersResponse.data.map(async (member) => {
-              try {
-                  const userResponse = await axios.get(`${BACKEND_BASE_URL}${API_USERS_PATH}/${member.userId}`);
-                  return { ...member, userDetails: userResponse.data };
-              } catch (userErr) {
-                  console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
-                  return { ...member, userDetails: null }; // Return null if user details can't be fetched
-              }
-            })
-          );
-          setMembers(membersWithDetails);
+        // For each member, fetch their full user details to display names and other info
+        const membersWithDetails = await Promise.all(
+          membersResponse.data.map(async (member) => {
+            try {
+              const userResponse = await axios.get(`${BACKEND_BASE_URL}${API_USERS_PATH}/${member.userId}`);
+              return { ...member, userDetails: userResponse.data };
+            } catch (userErr) {
+              console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
+              return { ...member, userDetails: null }; // Return null if user details can't be fetched
+            }
+          })
+        );
+        setMembers(membersWithDetails);
       }
-
     } catch (err) {
       console.error("Error fetching group details or members:", err);
       // Set a user-friendly error message
@@ -95,21 +95,21 @@ function ViewGroupPage() {
           axios.defaults.baseURL = BACKEND_BASE_URL; // Ensure axios base URL is set
           const response = await axios.get(`${BACKEND_BASE_URL}${API_USERS_PATH}/${user.uid}`);
           if (response.data && response.data.firstName) {
-            setCurrentUserName(`${response.data.firstName} ${response.data.lastName || ''}`);
-            setStartingPerson(`${response.data.firstName} ${response.data.lastName || ''}`);
+            setCurrentUserName(`${response.data.firstName} ${response.data.lastName || ""}`);
+            setStartingPerson(`${response.data.firstName} ${response.data.lastName || ""}`);
           } else {
-            setCurrentUserName('User');
-            setStartingPerson('User');
+            setCurrentUserName("User");
+            setStartingPerson("User");
           }
         } catch (error) {
           console.error("Error fetching current user's name:", error);
-          setCurrentUserName('User');
-          setStartingPerson('User');
+          setCurrentUserName("User");
+          setStartingPerson("User");
         }
       } else {
         setCurrentUserId(null);
-        setCurrentUserName('');
-        setStartingPerson('Not logged in');
+        setCurrentUserName("");
+        setStartingPerson("Not logged in");
       }
     });
 
@@ -130,7 +130,7 @@ function ViewGroupPage() {
       await axios.patch(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}/description`, {
         description: editedDescription,
       });
-      setGroup(prevGroup => ({ ...prevGroup, description: editedDescription }));
+      setGroup((prevGroup) => ({ ...prevGroup, description: editedDescription }));
       setIsEditingDescription(false);
     } catch (err) {
       console.error("Error saving description:", err);
@@ -139,7 +139,7 @@ function ViewGroupPage() {
   };
 
   const handleDescriptionCancel = () => {
-    setEditedDescription(group.description || '');
+    setEditedDescription(group.description || "");
     setIsEditingDescription(false);
   };
 
@@ -153,7 +153,7 @@ function ViewGroupPage() {
       // });
       // Optimistically update state even if backend call is commented out
       setIsPrivate(newPrivacyStatus);
-      setGroup(prevGroup => ({ ...prevGroup, isPrivate: newPrivacyStatus }));
+      setGroup((prevGroup) => ({ ...prevGroup, isPrivate: newPrivacyStatus }));
       console.log(`Privacy toggled to: ${newPrivacyStatus}. Backend update commented out.`);
     } catch (err) {
       console.error("Error updating privacy setting (frontend only):", err);
@@ -171,7 +171,7 @@ function ViewGroupPage() {
       const response = await axios.delete(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/${groupId}`);
 
       if (response.status === 200) {
-        router.push('/family-group'); // Redirect to family groups list on success
+        router.push("/family-group"); // Redirect to family groups list on success
       } else {
         throw new Error(`Failed to delete group: ${response.statusText}`);
       }
@@ -183,23 +183,23 @@ function ViewGroupPage() {
   };
 
   // Determine the current user's role in the group for UI conditional rendering (Frontend RBAC)
-  const currentUserMembership = members.find(member => member.userId === currentUserId);
+  const currentUserMembership = members.find((member) => member.userId === currentUserId);
   const currentUserRole = currentUserMembership?.role;
-  const isOwner = currentUserRole === 'Owner';
-  const isAdmin = currentUserRole === 'Admin';
+  const isOwner = currentUserRole === "Owner";
+  const isAdmin = currentUserRole === "Admin";
   const canEditGroup = isOwner || isAdmin; // Owners and Admins can perform certain edits/invites
 
   // Get existing member IDs to pass to the invite modal for filtering
-  const existingMemberIds = members.map(member => member.userId);
+  const existingMemberIds = members.map((member) => member.userId);
 
   // Function to handle member removal
   const handleRemoveMemberClick = async (member) => {
-    const memberName = member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}` : 'Unknown User';
-    
+    const memberName = member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ""}` : "Unknown User";
+
     if (window.confirm(`Are you sure you want to remove ${memberName} from this group?`)) {
       try {
         const response = await axios.delete(`${BACKEND_BASE_URL}${API_FAMILY_GROUP_MEMBERS_PATH}/${member.id}`);
-        
+
         if (response.status === 200) {
           // Refresh the member list
           await fetchGroupAndMembers();
@@ -225,10 +225,7 @@ function ViewGroupPage() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
         <p className="text-red-500 mb-4">{error}</p>
-        <button
-          onClick={() => router.back()}
-          className="px-4 py-2 rounded-md flex items-center gap-2 cursor-pointer"
-        >
+        <button onClick={() => router.back()} className="px-4 py-2 rounded-md flex items-center gap-2 cursor-pointer">
           <ArrowLeft className="w-4 h-4" /> Go Back
         </button>
       </div>
@@ -239,10 +236,7 @@ function ViewGroupPage() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
         <p className="text-[#808080] mb-4">Group not found.</p>
-        <button
-          onClick={() => router.back()}
-          className="bg-[#365643] text-white hover:bg-[#4F6F52] px-4 py-2 rounded-md flex items-center gap-2 cursor-pointer"
-        >
+        <button onClick={() => router.back()} className="bg-[#365643] text-white hover:bg-[#4F6F52] px-4 py-2 rounded-md flex items-center gap-2 cursor-pointer">
           <ArrowLeft className="w-4 h-4" /> Go Back
         </button>
       </div>
@@ -255,20 +249,15 @@ function ViewGroupPage() {
       <div className="container mx-auto px-4 py-10 pt-20">
         {/* Go Back button */}
         <div className="mt-18 mb-4">
-          <button
-            onClick={() => router.back()}
-            className="text-[#313131] hover:underline flex items-center gap-2"
-          >
+          <button onClick={() => router.back()} className="text-[#313131] hover:underline flex items-center gap-2">
             <ArrowLeft className="w-4 h-4" /> Go Back
           </button>
         </div>
-        
+
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
           <Link href={`/group-tree?treeId=${group.treeId}`}>
-            <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">
-              View Tree
-            </button>
+            <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">View Tree</button>
           </Link>
         </div>
 
@@ -280,8 +269,8 @@ function ViewGroupPage() {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-[#313131]">Family Group Description</h2>
                 {/* Conditionally render edit/save/cancel buttons based on user role */}
-                {canEditGroup && (
-                  isEditingDescription ? (
+                {canEditGroup &&
+                  (isEditingDescription ? (
                     <div className="flex gap-2">
                       <button onClick={handleDescriptionSave} className="text-[#365643] hover:text-[#4F6F52] flex items-center">
                         <Check className="w-5 h-5" /> Save
@@ -294,20 +283,9 @@ function ViewGroupPage() {
                     <button onClick={handleDescriptionEdit} className="text-[#313131] hover:text-[#4F6F52]">
                       <Edit className="w-5 h-5" />
                     </button>
-                  )
-                )}
+                  ))}
               </div>
-              {isEditingDescription ? (
-                <textarea
-                  value={editedDescription}
-                  onChange={(e) => setEditedDescription(e.target.value)}
-                  className="w-full h-32 p-3 border border-[#D9D9D9] rounded-md focus:outline-none focus:ring-2 focus:ring-[#365643]"
-                />
-              ) : (
-                <p className="text-[#808080] text-base leading-relaxed">
-                  {group.description || 'No description provided for this family group.'}
-                </p>
-              )}
+              {isEditingDescription ? <textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} className="w-full h-32 p-3 border border-[#D9D9D9] rounded-md focus:outline-none focus:ring-2 focus:ring-[#365643]" /> : <p className="text-[#808080] text-base leading-relaxed">{group.description || "No description provided for this family group."}</p>}
             </div>
 
             {/* Family Group Settings Card */}
@@ -318,11 +296,9 @@ function ViewGroupPage() {
               <div className="flex justify-between items-center py-3 border-b border-[#F2F2F2]">
                 <div>
                   <p className="text-[#313131] font-medium">Private</p>
-                  <p className="text-[#808080] text-sm mt-1">
-                    Only group Owner / Admins can send invites and create invite links
-                  </p>
+                  <p className="text-[#808080] text-sm mt-1">Only group Owner / Admins can send invites and create invite links</p>
                 </div>
-                
+
                 {/* Only allow owner/admin to toggle privacy */}
                 {canEditGroup && (
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -343,9 +319,7 @@ function ViewGroupPage() {
               <div className="flex justify-between items-center py-3">
                 <div>
                   <p className="text-[#313131] font-medium">Starting Person</p>
-                  <p className="text-[#808080] text-sm mt-1">
-                    This person appears in the root position when I view this group tree
-                  </p>
+                  <p className="text-[#808080] text-sm mt-1">This person appears in the root position when I view this group tree</p>
                 </div>
                 <div className="flex items-center gap-2 bg-[#F2F2F2] rounded-full px-4 py-2 cursor-pointer">
                   <User className="w-4 h-4 text-[#313131]" />
@@ -358,17 +332,36 @@ function ViewGroupPage() {
               <div className="mt-6 flex gap-4">
                 {/* Placeholder for Leave Group button */}
                 <button
-                  className="bg-red-500 text-white hover:bg-red-600 px-6 py-2 rounded-md"
-                  onClick={() => console.log('Leave Group clicked')}
+                  disabled={isLeaving}
+                  onClick={async () => {
+                    if (!currentUserId || !groupId || isLeaving) return;
+
+                    if (!confirm("Are you sure you want to leave this group?")) return;
+
+                    try {
+                      setIsLeaving(true);
+
+                      const response = await axios.post(`${BACKEND_BASE_URL}${API_FAMILY_GROUPS_PATH}/leave`, {
+                        groupId,
+                        userId: currentUserId,
+                      });
+
+                      alert(response.data.message);
+                      router.push("/family-group"); // redirect after leaving
+                    } catch (error) {
+                      console.error("Error leaving group:", error);
+                      alert(error.response?.data?.message || "Failed to leave group.");
+                      setIsLeaving(false);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 hover:text-white transition-colors ${isLeaving ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
-                  Leave Group
+                  {isLeaving ? "Leaving..." : "Leave Group"}
                 </button>
+
                 {/* Show Delete Group button only if current user is the owner */}
                 {isOwner && (
-                  <button
-                    className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md"
-                    onClick={() => setShowDeleteConfirmModal(true)}
-                  >
+                  <button className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md" onClick={() => setShowDeleteConfirmModal(true)}>
                     Delete Group
                   </button>
                 )}
@@ -397,20 +390,12 @@ function ViewGroupPage() {
                   members.map((member) => (
                     <div key={member.id} className="relative flex flex-col items-center p-3 border border-[#F2F2F2] rounded-lg">
                       <div className="w-16 h-16 rounded-full bg-[rgba(79,111,82,0.1)] flex items-center justify-center mb-2">
-                        <span className="text-[#313131] font-bold text-2xl">
-                          {getInitials(member.userDetails?.firstName, member.userDetails?.lastName)}
-                        </span>
+                        <span className="text-[#313131] font-bold text-2xl">{getInitials(member.userDetails?.firstName, member.userDetails?.lastName)}</span>
                       </div>
-                      <p className="text-[#313131] font-medium text-sm text-center">
-                        {member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}` : 'Unknown User'}
-                      </p>
+                      <p className="text-[#313131] font-medium text-sm text-center">{member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ""}` : "Unknown User"}</p>
                       <p className="text-[#808080] text-xs text-center">{member.role}</p>
-                      {canEditGroup && member.userId !== currentUserId && !(member.role === 'Owner' && members.filter(m => m.role === 'Owner').length === 1) && (
-                        <button
-                          onClick={() => handleRemoveMemberClick(member)}
-                          className="absolute top-1 right-1 text-red-400 hover:text-red-600 p-1 rounded-full bg-white/70 hover:bg-white"
-                          title="Remove Member"
-                        >
+                      {canEditGroup && member.userId !== currentUserId && !(member.role === "Owner" && members.filter((m) => m.role === "Owner").length === 1) && (
+                        <button onClick={() => handleRemoveMemberClick(member)} className="absolute top-1 right-1 text-red-400 hover:text-red-600 p-1 rounded-full bg-white/70 hover:bg-white" title="Remove Member">
                           <XMark className="w-4 h-4" />
                         </button>
                       )}
@@ -431,27 +416,16 @@ function ViewGroupPage() {
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold text-[#313131]">Confirm Deletion</h3>
-              <button
-                onClick={() => setShowDeleteConfirmModal(false)}
-                className="text-[#808080] hover:text-[#313131]"
-              >
+              <button onClick={() => setShowDeleteConfirmModal(false)} className="text-[#808080] hover:text-[#313131]">
                 <XMark className="w-6 h-6" />
               </button>
             </div>
-            <p className="text-[#808080] mb-6">
-              Are you sure you want to delete the family group "{group.name}"? This action cannot be undone.
-            </p>
+            <p className="text-[#808080] mb-6">Are you sure you want to delete the family group "{group.name}"? This action cannot be undone.</p>
             <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirmModal(false)}
-                className="px-4 py-2 rounded-md border border-[#D9D9D9] text-[#313131] hover:bg-[#F2F2F2]"
-              >
+              <button onClick={() => setShowDeleteConfirmModal(false)} className="px-4 py-2 rounded-md border border-[#D9D9D9] text-[#313131] hover:bg-[#F2F2F2]">
                 Cancel
               </button>
-              <button
-                onClick={handleDeleteGroup}
-                className="px-4 py-2 rounded-md bg-red-500 text-white hover:bg-red-600"
-              >
+              <button onClick={handleDeleteGroup} className="px-4 py-2 rounded-md bg-red-500 text-white hover:bg-red-600">
                 Delete
               </button>
             </div>
