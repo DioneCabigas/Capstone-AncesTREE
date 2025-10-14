@@ -70,7 +70,6 @@ exports.updateGroupDescription = async (groupId, description) => {
 
 exports.deleteGroup = async (groupId) => {
   try {
-    // Get group details (to find its treeId)
     const groupDoc = await collection.doc(groupId).get();
     if (!groupDoc.exists) {
       throw new Error("Group not found");
@@ -79,7 +78,6 @@ exports.deleteGroup = async (groupId) => {
     const groupData = groupDoc.data();
     const treeId = groupData.treeId;
 
-    // 1️⃣ Delete all members of this group
     const membersSnapshot = await db.collection("familyGroupMembers").where("groupId", "==", groupId).get();
 
     if (!membersSnapshot.empty) {
@@ -89,7 +87,6 @@ exports.deleteGroup = async (groupId) => {
       console.log(`Deleted ${membersSnapshot.size} member(s) from group ${groupId}`);
     }
 
-    // 2️⃣ Delete the associated family tree (if it exists)
     if (treeId) {
       try {
         await familyTreeService.deleteFamilyTree(treeId);
@@ -99,7 +96,6 @@ exports.deleteGroup = async (groupId) => {
       }
     }
 
-    // 3️⃣ Delete the group document itself
     await collection.doc(groupId).delete();
     console.log(`Deleted group ${groupId}`);
 
@@ -121,35 +117,29 @@ exports.leaveGroup = async (groupId, userId) => {
   const groupData = groupDoc.data();
   const membersRef = db.collection('familyGroupMembers');
 
-  // ✅ Get all members of this group
   const membersSnapshot = await membersRef.where('groupId', '==', groupId).get();
 
   if (membersSnapshot.empty) {
-    // If no members, delete the group entirely
     await exports.deleteGroup(groupId);
     return { message: 'Group deleted because no members were found.' };
   }
 
-  // 🧩 If the owner is leaving
   if (groupData.ownerId === userId) {
     const otherMembers = membersSnapshot.docs.filter(doc => doc.data().userId !== userId);
 
     if (otherMembers.length > 0) {
-      // Automatically assign ownership to the first other member
       const newOwnerId = otherMembers[0].data().userId;
       await groupRef.update({
         ownerId: newOwnerId,
-        userId: newOwnerId // ✅ keep consistency with getGroupsByUser()
+        userId: newOwnerId
       });
       console.log(`Transferred ownership of group ${groupId} to ${newOwnerId}`);
     } else {
-      // No other members — delete group and its tree
       await exports.deleteGroup(groupId);
       return { message: 'Group deleted because the owner was the last member.' };
     }
   }
 
-  // ✅ Remove the member (owner or regular)
   const memberSnapshot = await membersRef
     .where('groupId', '==', groupId)
     .where('userId', '==', userId)
@@ -163,7 +153,6 @@ exports.leaveGroup = async (groupId, userId) => {
   memberSnapshot.forEach(doc => batch.delete(doc.ref));
   await batch.commit();
 
-  // ✅ NEW: Delete the group if no members remain
   const remainingMembersSnapshot = await membersRef.where('groupId', '==', groupId).get();
   if (remainingMembersSnapshot.empty) {
     await exports.deleteGroup(groupId);
