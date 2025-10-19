@@ -9,7 +9,7 @@
  * - Dark Gray (#313131) as 10% accent color
  */
 
-import Navbar from '../../components/Navbar';
+import Layout from '../../components/Layout';
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/app/utils/firebase";
@@ -72,8 +72,9 @@ function HomeContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F4F4F4]">
-      <Navbar />
+    <Layout>
+      <div className="min-h-screen bg-[#F4F4F4]">
+        {/* Navbar is now handled by Layout component */}
       
       {/* Main content with 60-30-10 color distribution */}
       <div className="container mx-auto p-8 py-20">
@@ -153,7 +154,8 @@ function HomeContent() {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </Layout>
   );
 }
 

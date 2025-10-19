@@ -2,7 +2,6 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const session = require("express-session");
-const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const connectionRoutes = require("./routes/connectionRoutes");
 const familyGroupRoutes = require("./routes/familyGroupRoutes");
@@ -23,7 +22,6 @@ app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(bodyParser.json());
 // app.use(express.json()); // Ignore this. Need to test for something
 
-app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/connections", connectionRoutes);
 app.use("/api/family-groups", familyGroupRoutes);

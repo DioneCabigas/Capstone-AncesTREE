@@ -6,7 +6,8 @@ import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import axios from 'axios';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
+import Layout from '@/components/Layout';
+import AuthController from '@/components/AuthController';
 
 function FamilyGroup() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -209,9 +210,9 @@ function FamilyGroup() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
-      <Navbar/>
-      <div className="m-auto max-w-7xl px-4 py-10">
+    <Layout>
+      <div className="min-h-screen bg-white">
+        <div className="m-auto max-w-7xl px-4 py-6">
         <div className="bg-white mt-18 rounded-lg p-8 mb-10 flex items-center justify-between shadow-md">
           <h2 className="text-3xl font-bold text-[#313131]">
             Family Group
@@ -276,6 +277,7 @@ function FamilyGroup() {
             )}
           </div>
         )}
+        </div>
       </div>
 
       {isModalOpen && (
@@ -358,8 +360,17 @@ function FamilyGroup() {
           </div>
         </div>
       )}
-    </div>
+    </Layout>
   );
 }
 
-export default FamilyGroup;
+// Wrap with AuthController to ensure only authenticated users can access
+function FamilyGroupWithAuth() {
+  return (
+    <AuthController mode="PROTECT">
+      <FamilyGroup />
+    </AuthController>
+  );
+}
+
+export default FamilyGroupWithAuth;

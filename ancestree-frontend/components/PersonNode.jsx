@@ -41,10 +41,7 @@ export default function PersonNode({ data }) {
 
       {/* Three dots button */}
       {data.isCurrentUsersTree === true && (
-        <button
-          onClick={toggleActionMenu}
-          className={`absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded transition-colors ${actionMenuOpen ? "bg-gray-200" : "hover:bg-gray-100"}`}
-        >
+        <button onClick={toggleActionMenu} className={`absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded transition-colors ${actionMenuOpen ? "bg-gray-200" : "hover:bg-gray-100"}`}>
           <MoreHorizontal className="w-4 h-4 text-gray-600" />
         </button>
       )}
@@ -96,7 +93,11 @@ export default function PersonNode({ data }) {
           {/* Delete Person button */}
           <button
             onClick={() => {
-              data.handleDeletePerson(data.personId);
+              if (data.personId === data.currentUserId) {
+                alert("You cannot delete your own person node.");
+              } else {
+                data.handleDeletePerson(data.personId);
+              }
               setActionMenuOpen(false);
             }}
             className="w-8 h-8 bg-red-500 rounded-full shadow-sm border border-red-600 flex items-center justify-center hover:bg-red-600 transition-colors"

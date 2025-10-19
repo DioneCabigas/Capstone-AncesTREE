@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
-import LoadingSpinner from "@/components/LoadingSpinner";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function AuthController({ children, mode = "PROTECT" }) {
   const router = useRouter();
@@ -56,9 +56,15 @@ export default function AuthController({ children, mode = "PROTECT" }) {
     return () => unsubscribe();
   }, [router, mode]);
   
-  // Show loading spinner while checking authentication
+  // Show loading screen while checking authentication
   if (isLoading) {
-    return <LoadingSpinner />;
+    return (
+      <LoadingScreen 
+        message="Authenticating..." 
+        subMessage="Please wait while we verify your credentials"
+        variant="default"
+      />
+    );
   }
   
   // Handle the different auth scenarios based on mode
