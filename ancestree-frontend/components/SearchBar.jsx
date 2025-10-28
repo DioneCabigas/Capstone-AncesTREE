@@ -19,7 +19,7 @@ export default function SearchBar() {
   const inputRef = useRef(null);
   const filtersRef = useRef(null);
   
-  const BACKEND_BASE_URL = 'http://localhost:3001';
+  const BACKEND_BASE_URL = 'https://capstone-ancestree.onrender.com';
 
   const getInitials = (firstName, lastName) => {
     if (!firstName && !lastName) return 'N/A';

@@ -9,7 +9,7 @@ import Layout from '../../components/Layout';
 import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
 import axios from 'axios';
 
-axios.defaults.baseURL = 'http://localhost:3001';
+axios.defaults.baseURL = 'https://capstone-ancestree.onrender.com';
 
 function ProfilePage() {
   const [currentUser, setCurrentUser] = useState(null);

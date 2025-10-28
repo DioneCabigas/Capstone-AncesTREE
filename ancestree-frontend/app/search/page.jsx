@@ -14,7 +14,7 @@ function SearchUsers() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const BACKEND_BASE_URL = 'http://localhost:3001';
+  const BACKEND_BASE_URL = 'https://capstone-ancestree.onrender.com';
 
   const getInitials = (firstName, lastName) => {
     if (!firstName && !lastName) return 'N/A';

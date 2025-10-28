@@ -88,7 +88,7 @@ function ViewGroupPage() {
         console.log("User logged in:", user.uid);
         setCurrentUserId(user.uid);
         try {
-          const profileResponse = await axios.get(`http://localhost:3001/api/user/${user.uid}`);
+          const profileResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${user.uid}`);
           setCurrentUser(profileResponse.data);
           console.log("Fetched user profile: ", profileResponse.data);
         } catch (error) {
@@ -135,7 +135,7 @@ function ViewGroupPage() {
 
   const fetchUserDetails = async (uid) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/user/${uid}`);
+      const response = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${uid}`);
       if (response.status === 200) {
         return response.data;
       }
@@ -151,19 +151,19 @@ function ViewGroupPage() {
   const fetchGroupDataAndMembers = async (treeId) => {
     try {
       // Get group by tree ID
-      const groupResponse = await axios.get(`http://localhost:3001/api/family-groups/tree/${treeId}`);
+      const groupResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/family-groups/tree/${treeId}`);
       if (groupResponse.status === 200) {
         const group = groupResponse.data;
         setGroupData(group);
 
         // Fetch group members
-        const membersResponse = await axios.get(`http://localhost:3001/api/family-group-members/group/${group.id}`);
+        const membersResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/family-group-members/group/${group.id}`);
         if (membersResponse.status === 200) {
           // For each member, fetch their user details
           const membersWithDetails = await Promise.all(
             membersResponse.data.map(async (member) => {
               try {
-                const userResponse = await axios.get(`http://localhost:3001/api/user/${member.userId}`);
+                const userResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${member.userId}`);
                 return { ...member, userDetails: userResponse.data };
               } catch (userErr) {
                 console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
@@ -187,7 +187,7 @@ function ViewGroupPage() {
   // Fetch pending merge requests for owners
   const fetchPendingMergeRequests = async (groupId) => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/merge-requests/group/${groupId}/pending`);
+      const response = await axios.get(`https://capstone-ancestree.onrender.com/api/merge-requests/group/${groupId}/pending`);
       if (response.status === 200) {
         setMergeRequests(response.data);
         setPendingMergeRequestsCount(response.data.length);
@@ -215,7 +215,7 @@ function ViewGroupPage() {
         country: trimmedCountry,
       });
 
-      const res = await axios.get(`http://localhost:3001/api/search?${params.toString()}`);
+      const res = await axios.get(`https://capstone-ancestree.onrender.com/api/search?${params.toString()}`);
 
       if (res.status === 200) {
         return res.data.results || []; // Return the results array
@@ -488,7 +488,7 @@ function ViewGroupPage() {
     try {
       if (treeIdToUse) {
         console.log("Fetching persons for tree ID:", treeIdToUse);
-        const personsResponse = await axios.get(`http://localhost:3001/api/persons/tree/${treeIdToUse}`);
+        const personsResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/persons/tree/${treeIdToUse}`);
         const fetchedPeople = personsResponse.data;
         console.log("People data:", fetchedPeople);
         setPeople(fetchedPeople);
@@ -513,7 +513,7 @@ function ViewGroupPage() {
   const createTree = async (uid, userProfileData) => {
     let treeIdToUse = null;
     try {
-      const newTreeId = await axios.post(`http://localhost:3001/api/family-trees/newTree`, {
+      const newTreeId = await axios.post(`https://capstone-ancestree.onrender.com/api/family-trees/newTree`, {
         userId: uid,
         treeName: uid,
         firstName: userProfileData?.firstName || "My",
@@ -554,7 +554,7 @@ function ViewGroupPage() {
     if (isEditMode && selectedPersonId) {
       // EDIT
       try {
-        await axios.put(`http://localhost:3001/api/persons/${selectedPersonId}`, formData);
+        await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${selectedPersonId}`, formData);
         console.log(`Successfully updated person ${selectedPersonId}`, formData);
       } catch (error) {
         console.error("Error updating person:", error);
@@ -573,7 +573,7 @@ function ViewGroupPage() {
       console.log("Targeting treeId:", treeId);
 
       try {
-        const createPersonResponse = await axios.post(`http://localhost:3001/api/persons/${treeId}`, {
+        const createPersonResponse = await axios.post(`https://capstone-ancestree.onrender.com/api/persons/${treeId}`, {
           ...personDataToSend,
         });
         const newPerson = createPersonResponse.data;
@@ -598,7 +598,7 @@ function ViewGroupPage() {
           }
 
           try {
-            await axios.put(`http://localhost:3001/api/persons/${selectedPersonId}`, {
+            await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${selectedPersonId}`, {
               relationships: [
                 {
                   relatedPersonId: newPerson.personId,
@@ -613,7 +613,7 @@ function ViewGroupPage() {
           }
 
           try {
-            await axios.put(`http://localhost:3001/api/persons/${newPerson.personId}`, {
+            await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${newPerson.personId}`, {
               relationships: [
                 {
                   relatedPersonId: selectedPersonId,
@@ -711,7 +711,7 @@ function ViewGroupPage() {
     setIsLoading(true);
 
     try {
-      await axios.delete(`http://localhost:3001/api/persons/${personIdToDelete}`);
+      await axios.delete(`https://capstone-ancestree.onrender.com/api/persons/${personIdToDelete}`);
       console.log(`Successfully deleted person with ID: ${personIdToDelete}`);
       await fetchTreeData(treeId, isCurrentUsersTree);
     } catch (error) {
@@ -736,7 +736,7 @@ function ViewGroupPage() {
         return;
       }
 
-      await axios.post('http://localhost:3001/api/merge-requests', {
+      await axios.post('https://capstone-ancestree.onrender.com/api/merge-requests', {
         groupId: groupData.id,
         requesterId: currentUserId,
         targetUserId: owner.userId
