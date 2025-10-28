@@ -1,8 +1,14 @@
 const admin = require('firebase-admin');
-const serviceAccount = require('./capstone-ancestree-firebase-adminsdk-fbsvc-650a69d943.json'); 
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
   storageBucket: 'capstone-ancestree.firebasestorage.app',
 });
 
