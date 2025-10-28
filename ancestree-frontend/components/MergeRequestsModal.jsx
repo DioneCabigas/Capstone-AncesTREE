@@ -9,7 +9,7 @@ const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequest
 
   const handleApprove = async (requestId) => {
     try {
-      await axios.patch(`http://localhost:3001/api/merge-requests/${requestId}/status`, {
+      await axios.patch(`https://capstone-ancestree.onrender.com/api/merge-requests/${requestId}/status`, {
         status: 'approved',
         reviewedBy: currentUserId
       });
@@ -22,7 +22,7 @@ const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequest
 
   const handleDeny = async (requestId) => {
     try {
-      await axios.patch(`http://localhost:3001/api/merge-requests/${requestId}/status`, {
+      await axios.patch(`https://capstone-ancestree.onrender.com/api/merge-requests/${requestId}/status`, {
         status: 'denied',
         reviewedBy: currentUserId
       });

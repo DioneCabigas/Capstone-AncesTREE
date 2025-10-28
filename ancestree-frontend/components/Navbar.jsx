@@ -20,7 +20,7 @@ import { Bell, X } from "lucide-react";
 import axios from 'axios';
 import SearchBar from './SearchBar';
 
-axios.defaults.baseURL = 'http://localhost:3001';
+axios.defaults.baseURL = 'https://capstone-ancestree.onrender.com';
 
 export default function Navbar() {
   const [user, setUser] = useState(null);

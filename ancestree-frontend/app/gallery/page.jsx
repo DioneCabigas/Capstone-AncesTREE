@@ -37,7 +37,7 @@ const Gallery = () => {
 
   const fetchPhotos = async () => { // Ako nalang gi modify daan [Dione]
     try {
-      const res = await axios.get(`http://localhost:3001/api/gallery/user/${userId}`);
+      const res = await axios.get(`https://capstone-ancestree.onrender.com/api/gallery/user/${userId}`);
       console.log('Photos:', res.data.images); 
       setPhotos(res.data.images || []);
     } catch (err) {
@@ -64,7 +64,7 @@ const Gallery = () => {
     formData.append('file', selectedFile);
 
     try {
-      await axios.post(`http://localhost:3001/api/gallery/upload/${userId}`, formData, { // Gi change na sad ni nako [Dione]
+      await axios.post(`https://capstone-ancestree.onrender.com/api/gallery/upload/${userId}`, formData, { // Gi change na sad ni nako [Dione]
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setShowModal(false);

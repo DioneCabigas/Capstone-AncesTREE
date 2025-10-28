@@ -40,7 +40,7 @@ function Settings() {
 
       const uid = user.uid;
 
-      const res = await axios.post('http://localhost:3001/api/user/', {
+      const res = await axios.post('https://capstone-ancestree.onrender.com/api/user/', {
         uid,
         email,
       });
@@ -74,7 +74,7 @@ function Settings() {
 
       const uid = user.uid;
 
-      const res = await axios.post('http://localhost:3001/api/settings/user', {
+      const res = await axios.post('https://capstone-ancestree.onrender.com/api/settings/user', {
         uid,
         preferences: {
           familyGroups,
@@ -118,7 +118,7 @@ function Settings() {
       const uid = user.uid;
 
       // Delete user data from backend first
-      await axios.delete(`http://localhost:3001/api/user/${uid}`);
+      await axios.delete(`https://capstone-ancestree.onrender.com/api/user/${uid}`);
       
       // Delete Firebase Auth user
       await deleteUser(user);
@@ -157,13 +157,13 @@ function Settings() {
         setInitialFetchLoading(true);
         
         // Load user basic info
-        const userRes = await axios.get(`http://localhost:3001/api/user/${loggedUser.uid}`);
+        const userRes = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${loggedUser.uid}`);
         const userData = userRes.data;
         setEmail(userData.email);
         
         // Load settings separately
         try {
-          const settingsRes = await axios.get(`http://localhost:3001/api/settings/user/${loggedUser.uid}`);
+          const settingsRes = await axios.get(`https://capstone-ancestree.onrender.com/api/settings/user/${loggedUser.uid}`);
           const settingsData = settingsRes.data;
           
           // Set preferences and permissions from settings API
