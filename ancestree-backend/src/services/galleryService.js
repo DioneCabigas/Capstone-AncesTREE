@@ -1,5 +1,5 @@
 const admin = require('../config/database');
-const GalleryImage = require('../entities/gallery');
+const GalleryImage = require('../entities/Gallery');
 
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
