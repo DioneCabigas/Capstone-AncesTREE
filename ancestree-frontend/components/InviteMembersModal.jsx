@@ -11,7 +11,7 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
   
   const [notification, setNotification] = useState({ message: '', type: '' });
 
-  const BACKEND_BASE_URL = 'https://capstone-ancestree.onrender.com';
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
   // Helper to get initials for avatars
   const getInitials = (firstName, lastName) => {

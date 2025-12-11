@@ -9,6 +9,7 @@ const MAX_PHOTOS = 20;
 const MAX_SIZE_MB = 10;
 
 const Gallery = () => {
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const [photos, setPhotos] = useState([]);
   const [userId, setUserId] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -37,7 +38,7 @@ const Gallery = () => {
 
   const fetchPhotos = async () => { // Ako nalang gi modify daan [Dione]
     try {
-      const res = await axios.get(`https://capstone-ancestree.onrender.com/api/gallery/user/${userId}`);
+      const res = await axios.get(`${BACKEND_BASE_URL}/api/gallery/user/${userId}`);
       console.log('Photos:', res.data.images); 
       setPhotos(res.data.images || []);
     } catch (err) {
@@ -64,7 +65,7 @@ const Gallery = () => {
     formData.append('file', selectedFile);
 
     try {
-      await axios.post(`https://capstone-ancestree.onrender.com/api/gallery/upload/${userId}`, formData, { // Gi change na sad ni nako [Dione]
+      await axios.post(`${BACKEND_BASE_URL}/api/gallery/upload/${userId}`, formData, { // Gi change na sad ni nako [Dione]
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setShowModal(false);

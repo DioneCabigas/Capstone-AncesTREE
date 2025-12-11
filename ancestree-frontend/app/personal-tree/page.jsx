@@ -32,6 +32,7 @@ const initialFormData = {
 };
 
 function PersonalTree() {
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const router = useRouter();
   const searchParams = useSearchParams();
   const externalUid = searchParams.get("uid");
@@ -83,7 +84,7 @@ function PersonalTree() {
         console.log("User logged in:", user.uid);
         setCurrentUserId(user.uid);
         try {
-          const profileResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${user.uid}`);
+          const profileResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${user.uid}`);
           setCurrentUser(profileResponse.data);
           console.log("Fetched user profile: ", profileResponse.data);
         } catch (error) {
@@ -128,7 +129,7 @@ function PersonalTree() {
 
   const fetchUserDetails = async (uid) => {
     try {
-      const response = await axios.get(`https://capstone-ancestree.onrender.com/api/user/${uid}`);
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/user/${uid}`);
       if (response.status === 200) {
         return response.data;
       }
@@ -146,7 +147,7 @@ function PersonalTree() {
 
       // First attempt - alternative endpoint format
       try {
-        connectionsResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/connections/${userId}`);
+        connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/connections/${userId}`);
       } catch (error) {
         console.error("Failed to fetch connections data:", error);
       }
@@ -201,7 +202,7 @@ function PersonalTree() {
         country: trimmedCountry,
       });
 
-      const res = await axios.get(`https://capstone-ancestree.onrender.com/api/search?${params.toString()}`);
+      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
 
       if (res.status === 200) {
         return res.data.results || []; // Return the results array
@@ -472,7 +473,7 @@ function PersonalTree() {
     let treeIdToUse = null;
 
     try {
-      const treeResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/family-trees/personal/${uid}`);
+      const treeResponse = await axios.get(`${BACKEND_BASE_URL}/api/family-trees/personal/${uid}`);
       const personalTreeData = treeResponse.data;
 
       if (personalTreeData && personalTreeData.treeId) {
@@ -493,7 +494,7 @@ function PersonalTree() {
 
       if (treeIdToUse) {
         console.log("Fetching persons for tree ID:", treeIdToUse);
-        const personsResponse = await axios.get(`https://capstone-ancestree.onrender.com/api/persons/tree/${treeIdToUse}`);
+        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
         const fetchedPeople = personsResponse.data;
         console.log("People data:", fetchedPeople);
         setPeople(fetchedPeople);
@@ -518,7 +519,7 @@ function PersonalTree() {
   const createTree = async (uid, userProfileData) => {
     let treeIdToUse = null;
     try {
-      const newTreeId = await axios.post(`https://capstone-ancestree.onrender.com/api/family-trees/newTree`, {
+      const newTreeId = await axios.post(`${BACKEND_BASE_URL}/api/family-trees/newTree`, {
         userId: uid,
         treeName: uid,
         firstName: userProfileData?.firstName || "My",
@@ -559,7 +560,7 @@ function PersonalTree() {
     if (isEditMode && selectedPersonId) {
       // EDIT
       try {
-        await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${selectedPersonId}`, formData);
+        await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, formData);
         console.log(`Successfully updated person ${selectedPersonId}`, formData);
       } catch (error) {
         console.error("Error updating person:", error);
@@ -578,7 +579,7 @@ function PersonalTree() {
       console.log("Targeting treeId:", treeId);
 
       try {
-        const createPersonResponse = await axios.post(`https://capstone-ancestree.onrender.com/api/persons/${treeId}`, {
+        const createPersonResponse = await axios.post(`${BACKEND_BASE_URL}/api/persons/${treeId}`, {
           ...personDataToSend,
         });
         const newPerson = createPersonResponse.data;
@@ -603,7 +604,7 @@ function PersonalTree() {
           }
 
           try {
-            await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${selectedPersonId}`, {
+            await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, {
               relationships: [
                 {
                   relatedPersonId: newPerson.personId,
@@ -618,7 +619,7 @@ function PersonalTree() {
           }
 
           try {
-            await axios.put(`https://capstone-ancestree.onrender.com/api/persons/${newPerson.personId}`, {
+            await axios.put(`${BACKEND_BASE_URL}/api/persons/${newPerson.personId}`, {
               relationships: [
                 {
                   relatedPersonId: selectedPersonId,
@@ -720,7 +721,7 @@ function PersonalTree() {
     setIsLoading(true);
 
     try {
-      await axios.delete(`https://capstone-ancestree.onrender.com/api/persons/${personIdToDelete}`);
+      await axios.delete(`${BACKEND_BASE_URL}/api/persons/${personIdToDelete}`);
       console.log(`Successfully deleted person with ID: ${personIdToDelete}`);
 
       console.log("IsCurrentUser'sTree Boolean after delete: ", isCurrentUsersTree);

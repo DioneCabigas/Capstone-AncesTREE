@@ -9,6 +9,7 @@ import AuthController from '@/components/AuthController';
 import Link from "next/link";
 
 function SignupContent() {
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -61,7 +62,7 @@ function SignupContent() {
         telephoneNumber: '',
       };
 
-      const response = await fetch('https://capstone-ancestree.onrender.com/api/user', {
+      const response = await fetch(`${BACKEND_BASE_URL}/api/user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
