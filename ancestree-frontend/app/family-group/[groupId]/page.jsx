@@ -27,7 +27,7 @@ function ViewGroupPage() {
   const [showInviteModal, setShowInviteModal] = useState(false); // New state for invite modal
   const [isLeaving, setIsLeaving] = useState(false);
 
-  const BACKEND_BASE_URL = "https://capstone-ancestree.onrender.com";
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const API_FAMILY_GROUPS_PATH = "/api/family-groups";
   const API_FAMILY_GROUP_MEMBERS_PATH = "/api/family-group-members";
   const API_USERS_PATH = "/api/user"; // Added for fetching user details for members

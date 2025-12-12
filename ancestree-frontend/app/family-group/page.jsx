@@ -18,7 +18,8 @@ function FamilyGroup() {
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
 
-  const BACKEND_BASE_URL = 'https://capstone-ancestree.onrender.com';
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const API_FAMILY_GROUPS_PATH = '/api/family-groups';
   const API_FAMILY_GROUP_MEMBERS_PATH = '/api/family-group-members';
 

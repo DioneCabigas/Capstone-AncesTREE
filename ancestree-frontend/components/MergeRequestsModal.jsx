@@ -5,11 +5,12 @@ import { X, Check, User } from 'lucide-react';
 import axios from 'axios';
 
 const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequestHandled, currentUserId }) => {
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   if (!isOpen) return null;
 
   const handleApprove = async (requestId) => {
     try {
-      await axios.patch(`https://capstone-ancestree.onrender.com/api/merge-requests/${requestId}/status`, {
+      await axios.patch(`${BACKEND_BASE_URL}/api/merge-requests/${requestId}/status`, {
         status: 'approved',
         reviewedBy: currentUserId
       });
@@ -22,7 +23,7 @@ const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequest
 
   const handleDeny = async (requestId) => {
     try {
-      await axios.patch(`https://capstone-ancestree.onrender.com/api/merge-requests/${requestId}/status`, {
+      await axios.patch(`${BACKEND_BASE_URL}/api/merge-requests/${requestId}/status`, {
         status: 'denied',
         reviewedBy: currentUserId
       });
