@@ -87,7 +87,7 @@ Access the live application at https://ancestree2025.netlify.app
 Use the provided test credentials to log in and explore features.\
 User Roles and Test Credentials\
 Username: johndoe.ancestree@gmail.com\
-Password: JohnDoe123!\
+Password: JohnDoe123!
 
 ---
 
