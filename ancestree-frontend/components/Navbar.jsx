@@ -254,7 +254,10 @@ export default function Navbar() {
       }
       
       // Sort notifications by timestamp (newest first)
-      notificationList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const uniqueNotifications = notificationList.filter((n, index, self) => 
+        index === self.findIndex(other => other.id === n.id)
+      );
+      uniqueNotifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       
       // SMART NOTIFICATION DETECTION: Only show browser notifications for truly NEW items
       const previousNotificationIds = new Set(notifications.map(n => n.id));
@@ -301,8 +304,8 @@ export default function Navbar() {
       // Update the last check time
       setLastNotificationCheck(currentTime);
       
-      setNotifications(notificationList);
-      setUnreadCount(notificationList.filter(n => !n.isRead).length);
+      setNotifications(uniqueNotifications);
+      setUnreadCount(uniqueNotifications.filter(n => !n.isRead).length);
       
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -417,6 +420,12 @@ export default function Navbar() {
   const formatTimestamp = (timestamp) => {
     const now = new Date();
     const notificationTime = new Date(timestamp);
+    
+    // Check if the date is valid
+    if (isNaN(notificationTime.getTime())) {
+      return "Recently";
+    }
+    
     const diffInMs = now - notificationTime;
     const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
     const diffInHours = Math.floor(diffInMinutes / 60);
