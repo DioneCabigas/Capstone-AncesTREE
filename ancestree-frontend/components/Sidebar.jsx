@@ -25,26 +25,56 @@ export default function Sidebar() {
   const router = useRouter();
   const userMenuRef = useRef(null);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+  // useEffect(() => {
+  //   const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+  //     setUser(currentUser);
       
-      // Get user data for display
-      if (currentUser) {
-        try {
-          // Try to get firstName from localStorage first (faster)
-          const storedFirstName = localStorage.getItem('userFirstName');
-          if (storedFirstName) {
-            setUserData(prev => ({ ...prev, firstName: storedFirstName }));
-          }
-        } catch (error) {
-          console.error('Error getting user data:', error);
-        }
-      }
-    });
+  //     // Get user data for display
+  //     if (currentUser) {
+  //       try {
+  //         // Try to get firstName from localStorage first (faster)
+  //         const storedFirstName = localStorage.getItem('userFirstName');
+  //         if (storedFirstName) {
+  //           setUserData(prev => ({ ...prev, firstName: storedFirstName }));
+  //         }
+  //       } catch (error) {
+  //         console.error('Error getting user data:', error);
+  //       }
+  //     }
+  //   });
 
-    return () => unsubscribe();
-  }, []);
+  //   return () => unsubscribe();
+  // }, []);
+
+  useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    setUser(currentUser);
+    
+    // Fetch user data from backend directly
+    if (currentUser) {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_BASE_URL}/api/user/${currentUser.uid}`);
+        if (response.ok) {
+          const userDataFromBackend = await response.json();
+          const firstName = userDataFromBackend.firstName || 'User';
+          setUserData(prev => ({ ...prev, firstName }));
+          // Optionally cache in localStorage for future use
+          localStorage.setItem('userFirstName', firstName);
+        } else {
+          console.error('Failed to fetch user data:', response.status);
+          setUserData(prev => ({ ...prev, firstName: 'User' }));
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        setUserData(prev => ({ ...prev, firstName: 'User' }));
+      }
+    } else {
+      setUserData({ firstName: '' });
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
 
   // Handle clicks outside user menu dropdown
   useEffect(() => {
