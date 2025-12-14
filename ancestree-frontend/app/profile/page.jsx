@@ -73,8 +73,8 @@ function ProfilePage() {
           // Load the target user's profile using the server API
           // Pass requesting user ID for privacy checking
           const url = isOwn 
-            ? `/api/user/${targetUserId}` 
-            : `/api/user/${targetUserId}?requestingUserId=${currentUser.uid}`;
+            ? `/api/profile/${targetUserId}` 
+            : `/api/profile/${targetUserId}?requestingUserId=${currentUser.uid}`;
             
           const response = await axios.get(url);
 
@@ -284,7 +284,7 @@ function ProfilePage() {
     }));
   };
 
-  // Handle save changes - Updated to use server API
+  // Handle save changes - split user vs profile fields to proper endpoints
   const handleSaveChanges = async () => {
     setIsLoading(true);
     setError(null);
@@ -293,36 +293,65 @@ function ProfilePage() {
       if (!currentUser || !currentUser.uid) {
         throw new Error("User not authenticated");
       }
+
+      // Prepare payloads for each document
+      const userPayload = {
+        firstName: editedData.firstName,
+        lastName: editedData.lastName,
+        middleName: editedData.middleName,
+        suffix: editedData.suffix,
+        email: editedData.email,
+      };
+
+      const profilePayload = {
+        birthDate: editedData.birthDate,
+        birthPlace: editedData.birthPlace,
+        nationality: editedData.nationality,
+        civilStatus: editedData.civilStatus,
+        streetAddress: editedData.streetAddress,
+        cityAddress: editedData.cityAddress,
+        provinceAddress: editedData.provinceAddress,
+        countryAddress: editedData.countryAddress,
+        zipCode: editedData.zipCode,
+        contactNumber: editedData.contactNumber,
+        telephoneNumber: editedData.telephoneNumber,
+      };
+
+      // Update user basics and profile details in parallel
+      await Promise.all([
+        axios.put(`/api/user/${currentUser.uid}`, userPayload),
+        axios.put(`/api/profile/${currentUser.uid}`, profilePayload),
+      ]);
       
-      // Use the server API instead of direct Firebase 
-      const response = await axios.put(`/api/user/${currentUser.uid}`, editedData);
+      // Update local state with the merged values
+      setUserData((prev) => ({
+        ...prev,
+        ...userPayload,
+        ...profilePayload,
+      }));
+
+      setEditMode(false);
+      setSuccessMessage("Profile updated successfully");
       
-      if (response.status === 200) {
-        // Update local state
-        setUserData(editedData);
-        setEditMode(false);
-        setSuccessMessage("Profile updated successfully");
-        
-        // Update firstName in localStorage to notify navbar
-        if (editedData.firstName) {
+      // Update firstName in localStorage to notify navbar
+      if (editedData.firstName) {
+        try {
+          localStorage.setItem('userFirstName', editedData.firstName || '');
+          // Try to dispatch event but handle any errors
           try {
-            localStorage.setItem('userFirstName', editedData.firstName || '');
-            // Try to dispatch event but handle any errors
-            try {
-              window.dispatchEvent(new Event('userDataChanged'));
-            } catch (eventError) {
-              console.error("Error dispatching event:", eventError);
-            }
-          } catch (storageError) {
-            console.error("Error updating localStorage:", storageError);
+            window.dispatchEvent(new Event('userDataChanged'));
+          } catch (eventError) {
+            console.error("Error dispatching event:", eventError);
           }
+        } catch (storageError) {
+          console.error("Error updating localStorage:", storageError);
         }
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setSuccessMessage(null);
-        }, 3000);
       }
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
     } catch (error) {
       console.error("Error updating profile:", error);
       setError(error.response?.data?.message || "Failed to save changes. Please try again.");
