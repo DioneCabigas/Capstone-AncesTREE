@@ -60,7 +60,6 @@ function ViewGroupPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
 
   const getSortedSpouseIds = (id1, id2) => {
     return id1 < id2 ? [id1, id2] : [id2, id1];
@@ -198,108 +197,6 @@ function ViewGroupPage() {
       setMergeRequests([]);
       setPendingMergeRequestsCount(0);
     }
-  };
-
-  const performSuggestionsSearch = async (term, city, country) => {
-    const trimmedTerm = term.trim();
-    const trimmedCity = city.trim();
-    const trimmedCountry = country.trim();
-
-    if (!trimmedTerm && !trimmedCity && !trimmedCountry) {
-      return []; // Return empty array if no search criteria
-    }
-
-    try {
-      const params = new URLSearchParams({
-        search: trimmedTerm,
-        city: trimmedCity,
-        country: trimmedCountry,
-      });
-
-      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
-
-      if (res.status === 200) {
-        return res.data.results || []; // Return the results array
-      } else {
-        throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
-      }
-    } catch (err) {
-      console.error("Error searching for suggestions:", err);
-      return []; // Return empty array on error
-    }
-  };
-
-  // MODIFIED generateSuggestions function
-  const generateSuggestions = async (selectedPersonId, currentPeople) => {
-    let newSuggestions = [];
-
-    // Find the selected person's data
-    const selectedPerson = currentPeople.find((p) => p.personId === selectedPersonId);
-
-    if (!selectedPerson) {
-      console.warn("Selected person not found for generating suggestions.");
-      setSuggestions([]); // Clear suggestions if person not found
-      return;
-    }
-
-    // --- Rule: Suggest People with Same Last Name as the selectedPerson ---
-    if (selectedPerson.lastName) {
-      try {
-        const lastNameToSearch = selectedPerson.lastName;
-        console.log("Generating last name suggestions for:", selectedPerson.firstName, lastNameToSearch);
-
-        const matchingUsers = await performSuggestionsSearch(lastNameToSearch, "", "");
-
-        const filteredMatchingUsers = matchingUsers.filter(
-          (user) =>
-            user.id !== currentUserId && // Exclude the currently logged-in user
-            !(
-              // Exclude the selected person based on their name
-              (
-                user.firstName?.toLowerCase() === selectedPerson.firstName?.toLowerCase() &&
-                (user.middleName?.toLowerCase() || "") === (selectedPerson.middleName?.toLowerCase() || "") &&
-                user.lastName?.toLowerCase() === selectedPerson.lastName?.toLowerCase()
-              )
-            ) &&
-            // Exclude any other person already in the current tree based on first and last name
-            !currentPeople.some(
-              (treePerson) => treePerson.firstName?.toLowerCase() === user.firstName?.toLowerCase() && treePerson.lastName?.toLowerCase() === user.lastName?.toLowerCase()
-              // OPTIONAL IMPROVEMENT: If both 'treePerson' and 'user' have 'birthDate', add it for higher accuracy:
-              // && treePerson.birthDate === user.birthDate
-            )
-        );
-
-        filteredMatchingUsers.forEach((user) => {
-          newSuggestions.push({
-            id: user.id, // Unique ID
-            type: "same_last_name",
-            targetUserId: user.id,
-            name: `${user.firstName} ${user.lastName}`,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            details: `This user shares the last name "${lastNameToSearch}" with ${selectedPerson.firstName}.`,
-            potentialConnection: {
-              // Data structure for handleAddToTree
-              personId: user.id,
-              firstName: user.firstName,
-              middleName: user.middleName || "",
-              lastName: user.lastName,
-              birthDate: user.birthDate || "",
-              birthPlace: user.birthPlace || "",
-              gender: user.gender || "",
-              status: user.status || "living",
-              dateOfDeath: "",
-              placeOfDeath: "",
-            },
-          });
-        });
-      } catch (error) {
-        console.error("Error fetching users by last name for suggestions:", error);
-      }
-    }
-
-    setSuggestions(newSuggestions);
-    console.log("Suggestions: ", suggestions);
   };
 
   const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
@@ -536,19 +433,6 @@ function ViewGroupPage() {
     }
   };
 
-  // Sample data for connections and suggestions
-  // const connections = [
-  //   { id: 1, name: "Jane Doe", timeframe: "year - Present" },
-  //   { id: 2, name: "Jane Doe", timeframe: "year - Present" },
-  //   { id: 3, name: "Jane Doe", timeframe: "year - Present" },
-  // ];
-
-  // const suggestions = [
-  //   { id: 1, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  //   { id: 2, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  //   { id: 3, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  // ];
-
   const handleAddPerson = async () => {
     event.preventDefault();
     setIsLoading(true);
@@ -637,7 +521,6 @@ function ViewGroupPage() {
     }
 
     setSidebarOpen(false);
-    setSuggestions([]);
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
@@ -649,22 +532,11 @@ function ViewGroupPage() {
     setSidebarOpen(true);
     setActionMenuOpen(false);
     setFormData({ ...initialFormData });
-
-    if (people.length > 0) {
-      console.log("Sidebar opened for person:", personId, "Generating suggestions...");
-      await generateSuggestions(personId, people); // Pass personId here
-    } else {
-      console.log("Sidebar opened, but data not ready for suggestions.", {
-        peopleCount: people.length,
-      });
-      setSuggestions([]); // Clear suggestions if data isn't ready
-    }
   };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
     setIsEditMode(false);
-    // setSuggestions([]);
   };
 
   const toggleActionMenu = () => {
@@ -850,7 +722,7 @@ function ViewGroupPage() {
         {/* Tabs */}
         <div className="border-b border-gray-200">
           <div className="flex justify-around">
-            {["Add member", "Members", "Suggestions"].map((tab) => (
+            {["Add member", "Members"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1135,53 +1007,6 @@ function ViewGroupPage() {
                     <p className="text-xs text-gray-400">
                       Status: {member.status}
                     </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Suggestions Tab */}
-        {activeTab === "Suggestions" && (
-          <div className="p-6 space-y-4 overflow-y-auto h-full">
-            <div className="mb-4">
-              {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
-              <p className="text-xs text-gray-600">You might be related to the following people: </p>
-            </div>
-
-            {suggestions.map((person) => (
-              <div key={person.id} className="space-y-2">
-                <p className="text-xs text-gray-700">
-                  {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
-                  {person.details}
-                </p>
-                <div className="border border-gray-300 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                        <span className="text-[#313131] text-xl font-bold">
-                          {person.firstName ? person.firstName.charAt(0) : ""}
-                          {person.lastName ? person.lastName.charAt(0) : ""}
-                        </span>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                        <p className="text-xs text-gray-500">{person.timeframe}</p>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
-                        <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
-                      </a>
-                      <button
-                        onClick={() => handleAddToTree(person.potentialConnection)}
-                        className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: "#365643" }}
-                      >
-                        Add to Tree
-                      </button>
-                    </div>
                   </div>
                 </div>
               </div>
