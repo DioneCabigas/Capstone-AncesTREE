@@ -293,13 +293,13 @@ function ViewGroupPage() {
               <h2 className="text-xl font-semibold text-[#313131] mb-4">Family Group Settings</h2>
 
               {/* Privacy Toggle */}
-              <div className="flex justify-between items-center py-3 border-b border-[#F2F2F2]">
+              {/*<div className="flex justify-between items-center py-3 border-b border-[#F2F2F2]">
                 <div>
                   <p className="text-[#313131] font-medium">Private</p>
                   <p className="text-[#808080] text-sm mt-1">Only group Owner / Admins can send invites and create invite links</p>
                 </div>
 
-                {/* Only allow owner/admin to toggle privacy */}
+                Only allow owner/admin to toggle privacy
                 {canEditGroup && (
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -313,10 +313,10 @@ function ViewGroupPage() {
                     <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#365643]"></div>
                   </label>
                 )}
-              </div>
+              </div>*/}
 
               {/* Starting Person */}
-              <div className="flex justify-between items-center py-3">
+              {/* <div className="flex justify-between items-center py-3">
                 <div>
                   <p className="text-[#313131] font-medium">Starting Person</p>
                   <p className="text-[#808080] text-sm mt-1">This person appears in the root position when I view this group tree</p>
@@ -326,7 +326,7 @@ function ViewGroupPage() {
                   <span className="text-[#313131]">{startingPerson}</span>
                   <ChevronDown className="w-4 h-4 text-[#313131]" />
                 </div>
-              </div>
+              </div> */}
 
               {/* Action Buttons: Leave Group, Delete Group */}
               <div className="mt-6 flex gap-4">

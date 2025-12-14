@@ -11,7 +11,6 @@ import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow } from
 import dagre from "dagre";
 import "reactflow/dist/style.css";
 import PersonNode from "@/components/PersonNode";
-import MergeRequestsModal from "@/components/MergeRequestsModal";
 import axios from "axios";
 
 const nodeTypes = {
@@ -45,12 +44,6 @@ function ViewGroupPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("Add member");
-  const [groupData, setGroupData] = useState(null);
-  const [groupMembers, setGroupMembers] = useState([]);
-  const [currentUserRole, setCurrentUserRole] = useState(null);
-  const [mergeRequests, setMergeRequests] = useState([]);
-  const [showMergeRequestsModal, setShowMergeRequestsModal] = useState(false);
-  const [pendingMergeRequestsCount, setPendingMergeRequestsCount] = useState(0);
   const [formData, setFormData] = useState({ ...initialFormData });
   const [isValid, setIsValid] = useState(false);
   const [people, setPeople] = useState([]);
@@ -60,7 +53,7 @@ function ViewGroupPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
+  const [connections, setConnections] = useState([]);
 
   const getSortedSpouseIds = (id1, id2) => {
     return id1 < id2 ? [id1, id2] : [id2, id1];
@@ -118,7 +111,7 @@ function ViewGroupPage() {
       console.log("Both UID and User Profile are ready. Fetching tree data.");
       setIsCurrentUsersTree(true);
       fetchTreeData(treeId, isCurrentUsersTreeBool);
-      fetchGroupDataAndMembers(treeId);
+      fetchConnectionsData(currentUserId); //new
     } else if (!currentUserId && !currentUser) {
       console.log("User logged out or profile not loaded yet.");
       setNodes([]);
@@ -126,13 +119,6 @@ function ViewGroupPage() {
       setPeople([]);
     }
   }, [currentUserId, currentUser, treeId]);
-
-  // Fetch merge requests when group data and user role are available
-  useEffect(() => {
-    if (groupData && currentUserRole === 'Owner') {
-      fetchPendingMergeRequests(groupData.id);
-    }
-  }, [groupData, currentUserRole]);
 
   const fetchUserDetails = async (uid) => {
     try {
@@ -148,158 +134,49 @@ function ViewGroupPage() {
   };
 
   // FETCH CONNECTIONS
-  // Fetch group data and members
-  const fetchGroupDataAndMembers = async (treeId) => {
+  const fetchConnectionsData = async (userId) => {
     try {
-      // Get group by tree ID
-      const groupResponse = await axios.get(`${BACKEND_BASE_URL}/api/family-groups/tree/${treeId}`);
-      if (groupResponse.status === 200) {
-        const group = groupResponse.data;
-        setGroupData(group);
+      let connectionsResponse;
 
-        // Fetch group members
-        const membersResponse = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/group/${group.id}`);
-        if (membersResponse.status === 200) {
-          // For each member, fetch their user details
-          const membersWithDetails = await Promise.all(
-            membersResponse.data.map(async (member) => {
-              try {
-                const userResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${member.userId}`);
-                return { ...member, userDetails: userResponse.data };
-              } catch (userErr) {
-                console.warn(`Could not fetch details for member ${member.userId}:`, userErr);
-                return { ...member, userDetails: null };
-              }
-            })
-          );
-          setGroupMembers(membersWithDetails);
-          
-          // Find current user's role
-          const currentMember = membersWithDetails.find(member => member.userId === currentUserId);
-          setCurrentUserRole(currentMember?.role || null);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching group data and members:", error);
-      setGroupMembers([]);
-    }
-  };
-
-  // Fetch pending merge requests for owners
-  const fetchPendingMergeRequests = async (groupId) => {
-    try {
-      const response = await axios.get(`${BACKEND_BASE_URL}/api/merge-requests/group/${groupId}/pending`);
-      if (response.status === 200) {
-        setMergeRequests(response.data);
-        setPendingMergeRequestsCount(response.data.length);
-      }
-    } catch (error) {
-      console.error("Error fetching merge requests:", error);
-      setMergeRequests([]);
-      setPendingMergeRequestsCount(0);
-    }
-  };
-
-  const performSuggestionsSearch = async (term, city, country) => {
-    const trimmedTerm = term.trim();
-    const trimmedCity = city.trim();
-    const trimmedCountry = country.trim();
-
-    if (!trimmedTerm && !trimmedCity && !trimmedCountry) {
-      return []; // Return empty array if no search criteria
-    }
-
-    try {
-      const params = new URLSearchParams({
-        search: trimmedTerm,
-        city: trimmedCity,
-        country: trimmedCountry,
-      });
-
-      const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
-
-      if (res.status === 200) {
-        return res.data.results || []; // Return the results array
-      } else {
-        throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
-      }
-    } catch (err) {
-      console.error("Error searching for suggestions:", err);
-      return []; // Return empty array on error
-    }
-  };
-
-  // MODIFIED generateSuggestions function
-  const generateSuggestions = async (selectedPersonId, currentPeople) => {
-    let newSuggestions = [];
-
-    // Find the selected person's data
-    const selectedPerson = currentPeople.find((p) => p.personId === selectedPersonId);
-
-    if (!selectedPerson) {
-      console.warn("Selected person not found for generating suggestions.");
-      setSuggestions([]); // Clear suggestions if person not found
-      return;
-    }
-
-    // --- Rule: Suggest People with Same Last Name as the selectedPerson ---
-    if (selectedPerson.lastName) {
+      // First attempt - alternative endpoint format
       try {
-        const lastNameToSearch = selectedPerson.lastName;
-        console.log("Generating last name suggestions for:", selectedPerson.firstName, lastNameToSearch);
+        connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/connections/${userId}`);
+      } catch (error) {
+        console.error("Failed to fetch connections data:", error);
+      }
 
-        const matchingUsers = await performSuggestionsSearch(lastNameToSearch, "", "");
+      if (connectionsResponse.status === 200) {
+        // For each connection, get the other user's details
+        const connectionsWithDetails = await Promise.all(
+          connectionsResponse.data.map(async (conn) => {
+            // Use the connectionWith field if available, otherwise determine it
+            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
 
-        const filteredMatchingUsers = matchingUsers.filter(
-          (user) =>
-            user.id !== currentUserId && // Exclude the currently logged-in user
-            !(
-              // Exclude the selected person based on their name
-              (
-                user.firstName?.toLowerCase() === selectedPerson.firstName?.toLowerCase() &&
-                (user.middleName?.toLowerCase() || "") === (selectedPerson.middleName?.toLowerCase() || "") &&
-                user.lastName?.toLowerCase() === selectedPerson.lastName?.toLowerCase()
-              )
-            ) &&
-            // Exclude any other person already in the current tree based on first and last name
-            !currentPeople.some(
-              (treePerson) => treePerson.firstName?.toLowerCase() === user.firstName?.toLowerCase() && treePerson.lastName?.toLowerCase() === user.lastName?.toLowerCase()
-              // OPTIONAL IMPROVEMENT: If both 'treePerson' and 'user' have 'birthDate', add it for higher accuracy:
-              // && treePerson.birthDate === user.birthDate
-            )
+            const userDetails = await fetchUserDetails(otherUserId);
+
+            return {
+              ...conn,
+              otherUserId,
+              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User",
+              firstName: userDetails ? userDetails.firstName : "",
+              lastName: userDetails ? userDetails.lastName : "",
+              gender: userDetails ? userDetails.gender : "",
+              birthDate: userDetails ? userDetails.birthDate : "",
+              birthPlace: userDetails ? userDetails.birthPlace : "",
+              status: userDetails ? userDetails.status : "living",
+              dateOfDeath: userDetails ? userDetails.dateOfDeath : "",
+              placeOfDeath: userDetails ? userDetails.placeOfDeath : "",
+            };
+          })
         );
 
-        filteredMatchingUsers.forEach((user) => {
-          newSuggestions.push({
-            id: user.id, // Unique ID
-            type: "same_last_name",
-            targetUserId: user.id,
-            name: `${user.firstName} ${user.lastName}`,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            details: `This user shares the last name "${lastNameToSearch}" with ${selectedPerson.firstName}.`,
-            potentialConnection: {
-              // Data structure for handleAddToTree
-              personId: user.id,
-              firstName: user.firstName,
-              middleName: user.middleName || "",
-              lastName: user.lastName,
-              birthDate: user.birthDate || "",
-              birthPlace: user.birthPlace || "",
-              gender: user.gender || "",
-              status: user.status || "living",
-              dateOfDeath: "",
-              placeOfDeath: "",
-            },
-          });
-        });
-      } catch (error) {
-        console.error("Error fetching users by last name for suggestions:", error);
+        setConnections(connectionsWithDetails);
       }
+    } catch (error) {
+      console.error("Error fetching connections data:", error);
+      setError("Failed to load connections. Please check console for details.");
+      setConnections([]);
     }
-
-    setSuggestions(newSuggestions);
-    console.log("Suggestions: ", suggestions);
   };
 
   const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
@@ -536,19 +413,6 @@ function ViewGroupPage() {
     }
   };
 
-  // Sample data for connections and suggestions
-  // const connections = [
-  //   { id: 1, name: "Jane Doe", timeframe: "year - Present" },
-  //   { id: 2, name: "Jane Doe", timeframe: "year - Present" },
-  //   { id: 3, name: "Jane Doe", timeframe: "year - Present" },
-  // ];
-
-  // const suggestions = [
-  //   { id: 1, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  //   { id: 2, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  //   { id: 3, name: "Jane Doe", timeframe: "year - Present", relatedTo: "John Doe" },
-  // ];
-
   const handleAddPerson = async () => {
     event.preventDefault();
     setIsLoading(true);
@@ -637,7 +501,6 @@ function ViewGroupPage() {
     }
 
     setSidebarOpen(false);
-    setSuggestions([]);
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
@@ -649,22 +512,11 @@ function ViewGroupPage() {
     setSidebarOpen(true);
     setActionMenuOpen(false);
     setFormData({ ...initialFormData });
-
-    if (people.length > 0) {
-      console.log("Sidebar opened for person:", personId, "Generating suggestions...");
-      await generateSuggestions(personId, people); // Pass personId here
-    } else {
-      console.log("Sidebar opened, but data not ready for suggestions.", {
-        peopleCount: people.length,
-      });
-      setSuggestions([]); // Clear suggestions if data isn't ready
-    }
   };
 
   const closeSidebar = () => {
     setSidebarOpen(false);
     setIsEditMode(false);
-    // setSuggestions([]);
   };
 
   const toggleActionMenu = () => {
@@ -722,51 +574,6 @@ function ViewGroupPage() {
       setIsLoading(false);
     }
   };
-
-  // Handle merge request creation
-  const handleRequestMerge = async () => {
-    if (!groupData || !currentUserId) {
-      alert('Unable to create merge request. Missing group or user information.');
-      return;
-    }
-
-    try {
-      const owner = groupMembers.find(member => member.role === 'Owner');
-      if (!owner) {
-        alert('Unable to find group owner.');
-        return;
-      }
-
-      await axios.post(`${BACKEND_BASE_URL}/api/merge-requests`, {
-        groupId: groupData.id,
-        requesterId: currentUserId,
-        targetUserId: owner.userId
-      });
-
-      alert('Merge request sent successfully!');
-    } catch (error) {
-      console.error('Error creating merge request:', error);
-      if (error.response?.data?.message?.includes('already exists')) {
-        alert('You have already requested a merge for this group.');
-      } else {
-        alert('Failed to send merge request. Please try again.');
-      }
-    }
-  };
-
-  // Handle opening merge requests modal
-  const handleShowMergeRequests = () => {
-    setShowMergeRequestsModal(true);
-  };
-
-  // Handle when merge requests are processed
-  const handleMergeRequestProcessed = () => {
-    if (groupData) {
-      fetchPendingMergeRequests(groupData.id);
-    }
-    setShowMergeRequestsModal(false);
-  };
-
 
   return (
     <Layout>
@@ -850,7 +657,7 @@ function ViewGroupPage() {
         {/* Tabs */}
         <div className="border-b border-gray-200">
           <div className="flex justify-around">
-            {["Add member", "Members", "Suggestions"].map((tab) => (
+            {["Add member", "Connections"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1071,7 +878,7 @@ function ViewGroupPage() {
               {/* Add/Edit Person Button */}
               <div className="pt-4">
                 <button
-                  onClick={handleAddPerson}
+                  // onClick={handleAddPerson}
                   className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
                   style={{ backgroundColor: "#365643" }}
                 >
@@ -1082,123 +889,38 @@ function ViewGroupPage() {
             </div>
           </form>
         )}
-
-        {/* Members Tab */}
-        {activeTab === "Members" && (
+        {/* Connections Tab */}
+        {activeTab === "Connections" && (
           <div className="p-6 space-y-4 overflow-y-auto h-full">
-            {/* Request Merge / Merge Requests Button */}
-            {currentUserRole && (
-              <div className="mb-4">
-                {currentUserRole === 'Owner' ? (
-                  <button
-                    onClick={handleShowMergeRequests}
-                    className="w-full text-white py-2.5 px-4 rounded-md hover:bg-blue-600 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
-                    style={{ backgroundColor: "#3b82f6" }}
-                  >
-                    <Bell className="w-4 h-4" />
-                    <span>Merge Requests ({pendingMergeRequestsCount})</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleRequestMerge}
-                    className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-600 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
-                    style={{ backgroundColor: "#10b981" }}
-                  >
-                    <Users className="w-4 h-4" />
-                    <span>Request Merge</span>
-                  </button>
-                )}
-              </div>
-            )}
-            
-            <div className="mb-4">
-              <p className="text-xs text-gray-600">Group Members ({groupMembers.length})</p>
-            </div>
-            
-            {groupMembers.map((member) => (
-              <div key={member.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
+            {connections.map((person) => (
+              <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
                 <div className="flex items-center space-x-3">
+                  {/* <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-gray-500" />
+                  </div> */}
                   <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
                     <span className="text-[#313131] text-xl font-bold">
-                      {member.userDetails?.firstName ? member.userDetails.firstName.charAt(0) : ""}
-                      {member.userDetails?.lastName ? member.userDetails.lastName.charAt(0) : ""}
+                      {person.firstName ? person.firstName.charAt(0) : ""}
+                      {person.lastName ? person.lastName.charAt(0) : ""}
                     </span>
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium text-gray-800">
-                      {member.userDetails 
-                        ? `${member.userDetails.firstName} ${member.userDetails.lastName || ''}`.trim()
-                        : 'Unknown User'
-                      }
-                    </h4>
-                    <p className="text-xs text-gray-500">{member.role}</p>
-                    <p className="text-xs text-gray-400">
-                      Status: {member.status}
-                    </p>
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
+                    {/* <p className="text-xs text-gray-500">Alive</p> */}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Suggestions Tab */}
-        {activeTab === "Suggestions" && (
-          <div className="p-6 space-y-4 overflow-y-auto h-full">
-            <div className="mb-4">
-              {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
-              <p className="text-xs text-gray-600">You might be related to the following people: </p>
-            </div>
-
-            {suggestions.map((person) => (
-              <div key={person.id} className="space-y-2">
-                <p className="text-xs text-gray-700">
-                  {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
-                  {person.details}
-                </p>
-                <div className="border border-gray-300 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                        <span className="text-[#313131] text-xl font-bold">
-                          {person.firstName ? person.firstName.charAt(0) : ""}
-                          {person.lastName ? person.lastName.charAt(0) : ""}
-                        </span>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                        <p className="text-xs text-gray-500">{person.timeframe}</p>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
-                        <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
-                      </a>
-                      <button
-                        onClick={() => handleAddToTree(person.potentialConnection)}
-                        className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: "#365643" }}
-                      >
-                        Add to Tree
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <button
+                  onClick={() => handleAddToTree(person)}
+                  className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
+                  style={{ backgroundColor: "#365643" }}
+                >
+                  Add to Tree
+                </button>
               </div>
             ))}
           </div>
         )}
         </div>
-        
-        {/* Merge Requests Modal */}
-        <MergeRequestsModal
-          isOpen={showMergeRequestsModal}
-          onClose={() => setShowMergeRequestsModal(false)}
-          groupId={groupData?.id}
-          mergeRequests={mergeRequests}
-          onRequestHandled={handleMergeRequestProcessed}
-          currentUserId={currentUserId}
-        />
       </div>
     </Layout>
   );

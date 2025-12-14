@@ -56,6 +56,7 @@ function PersonalTree() {
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
   const [connections, setConnections] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   const getSortedSpouseIds = (id1, id2) => {
     return id1 < id2 ? [id1, id2] : [id2, id1];
@@ -126,6 +127,18 @@ function PersonalTree() {
       setPeople([]);
     }
   }, [currentUserId, currentUser, externalUid]);
+
+  // Regenerate suggestions when switching to Suggestions tab or when selectedPersonId changes
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (activeTab === "Suggestions" && selectedPersonId) {
+        setSuggestionsLoading(true);
+        await generateSuggestions(selectedPersonId, people);
+        setSuggestionsLoading(false);
+      }
+    };
+    fetchSuggestions();
+  }, [activeTab, selectedPersonId, people]);
 
   const fetchUserDetails = async (uid) => {
     try {
@@ -661,7 +674,9 @@ function PersonalTree() {
 
     if (people.length > 0) {
       console.log("Sidebar opened for person:", personId, "Generating suggestions...");
+      setSuggestionsLoading(true);
       await generateSuggestions(personId, people); // Pass personId here
+      setSuggestionsLoading(false);
     } else {
       console.log("Sidebar opened, but data not ready for suggestions.", {
         peopleCount: people.length,
@@ -673,6 +688,7 @@ function PersonalTree() {
   const closeSidebar = () => {
     setSidebarOpen(false);
     setIsEditMode(false);
+    setActiveTab('Add member');
     // setSuggestions([]);
   };
 
@@ -1094,42 +1110,49 @@ function PersonalTree() {
               <p className="text-xs text-gray-600">You might be related to these following people</p>
             </div>
 
-            {suggestions.map((person) => (
-              <div key={person.id} className="space-y-2">
-                <p className="text-xs text-gray-700">
-                  {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
-                  {person.details}
-                </p>
-                <div className="border border-gray-300 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
-                        <span className="text-[#313131] text-xl font-bold">
-                          {person.firstName ? person.firstName.charAt(0) : ""}
-                          {person.lastName ? person.lastName.charAt(0) : ""}
-                        </span>
+            {suggestionsLoading ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
+                <span className="ml-2 text-sm text-gray-600">Loading suggestions...</span>
+              </div>
+            ) : (
+              suggestions.map((person) => (
+                <div key={person.id} className="space-y-2">
+                  <p className="text-xs text-gray-700">
+                    {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
+                    {person.details}
+                  </p>
+                  <div className="border border-gray-300 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
+                          <span className="text-[#313131] text-xl font-bold">
+                            {person.firstName ? person.firstName.charAt(0) : ""}
+                            {person.lastName ? person.lastName.charAt(0) : ""}
+                          </span>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
+                          <p className="text-xs text-gray-500">{person.timeframe}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                        <p className="text-xs text-gray-500">{person.timeframe}</p>
+                      <div className="flex space-x-2">
+                        <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
+                          <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
+                        </a>
+                        <button
+                          onClick={() => handleAddToTree(person.potentialConnection)}
+                          className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
+                          style={{ backgroundColor: "#365643" }}
+                        >
+                          Add to Tree
+                        </button>
                       </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
-                        <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">View</button>
-                      </a>
-                      <button
-                        onClick={() => handleAddToTree(person.potentialConnection)}
-                        className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: "#365643" }}
-                      >
-                        Add to Tree
-                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
         </div>

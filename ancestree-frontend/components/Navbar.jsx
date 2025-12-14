@@ -254,7 +254,10 @@ export default function Navbar() {
       }
       
       // Sort notifications by timestamp (newest first)
-      notificationList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const uniqueNotifications = notificationList.filter((n, index, self) => 
+        index === self.findIndex(other => other.id === n.id)
+      );
+      uniqueNotifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
       
       // SMART NOTIFICATION DETECTION: Only show browser notifications for truly NEW items
       const previousNotificationIds = new Set(notifications.map(n => n.id));
@@ -301,8 +304,8 @@ export default function Navbar() {
       // Update the last check time
       setLastNotificationCheck(currentTime);
       
-      setNotifications(notificationList);
-      setUnreadCount(notificationList.filter(n => !n.isRead).length);
+      setNotifications(uniqueNotifications);
+      setUnreadCount(uniqueNotifications.filter(n => !n.isRead).length);
       
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -417,6 +420,12 @@ export default function Navbar() {
   const formatTimestamp = (timestamp) => {
     const now = new Date();
     const notificationTime = new Date(timestamp);
+    
+    // Check if the date is valid
+    if (isNaN(notificationTime.getTime())) {
+      return "Recently";
+    }
+    
     const diffInMs = now - notificationTime;
     const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
     const diffInHours = Math.floor(diffInMinutes / 60);
@@ -479,14 +488,14 @@ export default function Navbar() {
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-[#313131]">Notifications</h3>
                       <div className="flex items-center space-x-2">
-                        {notifications.length > 0 && (
+                        {/* {notifications.length > 0 && (
                           <button
                             onClick={clearAllNotifications}
                             className="text-xs text-[#4F6F52] hover:text-[#313131] transition-colors"
                           >
                             Clear all
                           </button>
-                        )}
+                        )} */}
                         <button
                           onClick={() => setNotificationsOpen(false)}
                           className="text-[#4F6F52] hover:text-[#313131] transition-colors"

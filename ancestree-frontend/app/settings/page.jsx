@@ -5,7 +5,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import { CircleAlert, Edit, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from 'axios';
-import { getAuth, onAuthStateChanged, updatePassword, deleteUser } from "firebase/auth";
+import { getAuth, onAuthStateChanged, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential, updateEmail } from "firebase/auth";
 import { useRouter } from 'next/navigation';
 
 function Settings() {
@@ -18,6 +18,8 @@ function Settings() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [originalEmail, setOriginalEmail] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialFetchLoading, setInitialFetchLoading] = useState(false);
@@ -38,24 +40,67 @@ function Settings() {
     try {
       if (!user) return;
       setLoading(true);
+      setErrorMessage('');
 
       const uid = user.uid;
+      const emailChanged = email !== originalEmail;
+      const passwordChanged = !!password;
+      const needsReauth = passwordChanged;
 
-      const res = await axios.post(`${BACKEND_BASE_URL}/api/user/`, {
-        uid,
-        email,
-      });
-
-      if (password) {
-        await updatePassword(user, password);
-        console.log("Password updated.");
+      if (needsReauth) {
+        if (!currentPassword) {
+          setErrorMessage('Please enter your current password to change password.');
+          setLoading(false);
+          return;
+        }
+        try {
+          const credential = EmailAuthProvider.credential(user.email, currentPassword);
+          await reauthenticateWithCredential(user, credential);
+        } catch (error) {
+          console.error('Reauthentication failed:', error);
+          setErrorMessage('Failed to verify current password. Please try again.');
+          setLoading(false);
+          return;
+        }
       }
 
-      console.log('Email/Password update success:', res.data.message);
+      if (emailChanged) {
+        // Note: Firebase Auth email update is disabled due to verification requirements.
+        // Only updating backend database.
+        setOriginalEmail(email);
+        console.log("Email changed, updating backend only.");
+      }
+
+      if (passwordChanged) {
+        try {
+          await updatePassword(user, password);
+          console.log("Password updated.");
+        } catch (error) {
+          console.error('Error updating password:', error);
+          setErrorMessage('Failed to update password. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Update backend if email changed
+      if (emailChanged) {
+        const res = await axios.post(`${BACKEND_BASE_URL}/api/user/`, {
+          uid,
+          email,
+        });
+        console.log('Email update success in backend:', res.data.message);
+      }
+
       setIsEditing(false);
-      window.location.reload();
+      setCurrentPassword('');
+      setPassword('');
+      setSuccessMessage('Account information updated successfully!');
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating email/password:', error.response?.data || error.message);
+      console.error('Error updating account:', error.response?.data || error.message);
+      setErrorMessage('Failed to update account information. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -161,6 +206,7 @@ function Settings() {
         const userRes = await axios.get(`${BACKEND_BASE_URL}/api/user/${loggedUser.uid}`);
         const userData = userRes.data;
         setEmail(userData.email);
+        setOriginalEmail(userData.email);
         
         // Load settings separately
         try {
@@ -247,6 +293,14 @@ function Settings() {
               <div>
                 {isEditing && (
                   <div>
+                    <p className="font-semibold">Current Password</p>
+                    <input
+                      type="password"
+                      className="border border-[#D9D9D9] px-2 py-1 rounded w-full mb-3"
+                      placeholder="Enter Current Password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                    />
                     <p className="font-semibold">New Password</p>
                     <input
                       type="password"
