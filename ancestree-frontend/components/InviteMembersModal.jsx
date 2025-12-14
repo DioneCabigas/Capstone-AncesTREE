@@ -110,13 +110,13 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
         <div className="flex justify-between items-center mb-4 pb-3">
           <h3 className="text-2xl font-bold text-[#313131]">Invite Members</h3>
           <div className="flex items-center gap-4">
-            <button
+            {/* <button
               // onClick={handleCopyInviteLink} // Removed onClick to make it static
               className="text-[#365643] flex items-center gap-1 text-sm font-medium cursor-default opacity-50" // Static styling
               title="Copy Invite Link (Functionality not active yet)"
             >
               <CopyIcon className="w-4 h-4" /> Copy Invite Link
-            </button>
+            </button> */}
             <button
               onClick={onClose}
               className="text-[#808080] hover:text-[#313131]"
