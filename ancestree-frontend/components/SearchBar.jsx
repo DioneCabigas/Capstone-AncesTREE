@@ -39,7 +39,7 @@ export default function SearchBar() {
       return;
     }
 
-    if (trimmedTerm.length > 0 && trimmedTerm.length < 2) {
+    if (trimmedTerm.length > 0 && trimmedTerm.length < 2 && !trimmedCity && !trimmedCountry) {
       setSearchResults([]);
       setError('');
       setIsLoading(false);
@@ -62,7 +62,14 @@ export default function SearchBar() {
       const res = await axios.get(`${BACKEND_BASE_URL}/api/search?${params.toString()}`);
 
       if (res.status === 200) {
-        setSearchResults(res.data.results || []);
+        const results = res.data.results || [];
+        // Filter on frontend for case-insensitive partial matches
+        const filtered = results.filter(user => {
+          const cityMatch = !trimmedCity || (user.cityAddress && user.cityAddress.toLowerCase().includes(trimmedCity.toLowerCase()));
+          const countryMatch = !trimmedCountry || (user.countryAddress && user.countryAddress.toLowerCase().includes(trimmedCountry.toLowerCase()));
+          return cityMatch && countryMatch;
+        });
+        setSearchResults(filtered);
       } else {
         throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
       }
@@ -128,17 +135,17 @@ export default function SearchBar() {
           placeholder="Search users..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          onFocus={() => searchTerm.trim().length >= 2 && setIsOpen(true)}
+          onFocus={() => (searchTerm.trim() || cityFilter.trim() || countryFilter.trim()) && setIsOpen(true)}
           className="block w-full pl-10 pr-16 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4F6F52] focus:border-[#4F6F52] bg-white text-sm"
         />
         <div className="absolute inset-y-0 right-0 flex items-center">
-          <button
+          {/* <button
             onClick={() => setShowFilters(!showFilters)}
             className="p-2 hover:bg-gray-100 rounded-md transition-colors"
             title="Toggle filters"
           >
             <Filter className={`h-4 w-4 ${showFilters ? 'text-[#4F6F52]' : 'text-gray-400'} hover:text-gray-600`} />
-          </button>
+          </button> */}
           {searchTerm && (
             <button
               onClick={handleClear}
@@ -206,9 +213,9 @@ export default function SearchBar() {
             <div className="px-4 py-3 text-red-600 text-sm">
               {error}
             </div>
-          ) : searchResults.length === 0 && searchTerm.trim().length >= 2 ? (
+          ) : searchResults.length === 0 && (searchTerm.trim() || cityFilter.trim() || countryFilter.trim()) ? (
             <div className="px-4 py-3 text-gray-500 text-sm">
-              No users found for "{searchTerm}"
+              No users found
             </div>
           ) : searchResults.length > 0 ? (
             <div className="max-h-80 overflow-y-auto">
