@@ -48,7 +48,8 @@ BS Information Technology, Cebu Institute of Technology - University
 
 **Design Principles**
 * Component Reusability
-  * Use of React components to promote DRY (Don't Repeat Yourself) principles.
+  * Use of React components to promote DRY (Don't Repeat Yourself) principles.\
+ 
 **Components**
 * Service Layer
   * Manages API request to the backend
@@ -63,7 +64,8 @@ BS Information Technology, Cebu Institute of Technology - University
 **Design Principles**
 * SOLID Principles
   * Ensures modular, reusable, and maintainable code.
-  * Separation of concerns, meaning each layer has distinct responsibilities.
+  * Separation of concerns, meaning each layer has distinct responsibilities.\
+
 **Components**
 * Repository Layer
   * Handles database operations (CRUD functionality).
