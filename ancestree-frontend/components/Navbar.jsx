@@ -488,14 +488,14 @@ export default function Navbar() {
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                       <h3 className="text-lg font-semibold text-[#313131]">Notifications</h3>
                       <div className="flex items-center space-x-2">
-                        {notifications.length > 0 && (
+                        {/* {notifications.length > 0 && (
                           <button
                             onClick={clearAllNotifications}
                             className="text-xs text-[#4F6F52] hover:text-[#313131] transition-colors"
                           >
                             Clear all
                           </button>
-                        )}
+                        )} */}
                         <button
                           onClick={() => setNotificationsOpen(false)}
                           className="text-[#4F6F52] hover:text-[#313131] transition-colors"
