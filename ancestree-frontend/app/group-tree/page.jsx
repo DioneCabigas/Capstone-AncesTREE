@@ -1071,7 +1071,7 @@ function ViewGroupPage() {
               {/* Add/Edit Person Button */}
               <div className="pt-4">
                 <button
-                  onClick={handleAddPerson}
+                  // onClick={handleAddPerson}
                   className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
                   style={{ backgroundColor: "#365643" }}
                 >
