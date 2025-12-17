@@ -51,17 +51,20 @@ exports.linkPerson = async (req, res) => {
   }
 };
 
-exports.mergeTrees = async (req, res) => {
+exports.importPersonalTree = async (req, res) => {
   try {
-    const { ownerId, sourceTreeIds, newTreeName } = req.body;
-    const treeId = await familyTreeService.mergeTreesIntoFamilyGroup(
-      ownerId,
-      sourceTreeIds,
-      newTreeName
-    );
-    res.status(201).json({ treeId });
+    const { treeId } = req.params;
+    const { personalTreeId } = req.body;
+
+    const importedIds =
+      await familyTreeService.importPersonalTreeIntoGroupTree(
+        treeId,
+        personalTreeId
+      );
+
+    res.status(201).json({ importedIds });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(400).json({ message: err.message });
   }
 };
 
