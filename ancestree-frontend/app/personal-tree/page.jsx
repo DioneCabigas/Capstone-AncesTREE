@@ -53,43 +53,31 @@ function PersonalTree() {
   // }, []);
 
   useEffect(() => {
-    if (!chartRef.current) return;
-    if (chartInstanceRef.current) return;
+    if (chartRef.current) {
+      const data = [
+        {
+          id: "1",
+          data: { "first name": "John", "last name": "Doe", birthday: "1980", gender: "M" },
+          rels: { spouses: ["2"], children: ["3"] },
+        },
+        {
+          id: "2",
+          data: { "first name": "Jane", "last name": "Doe", birthday: "1982", gender: "F" },
+          rels: { spouses: ["1"], children: ["3"] },
+        },
+        {
+          id: "3",
+          data: { "first name": "Bob", "last name": "Doe", birthday: "2005", gender: "M" },
+          rels: { parents: ["1", "2"] },
+        },
+      ];
 
-    // In dev (React Strict Mode), effects can run twice.
-    chartRef.current.innerHTML = "";
+      const f3Chart = f3.createChart("#FamilyChart", data);
 
-    const data = [
-      {
-        id: "1",
-        data: { "first name": "John", "last name": "Doe", birthday: "1980", gender: "M" },
-        rels: { spouses: ["2"], children: ["3"] },
-      },
-      {
-        id: "2",
-        data: { "first name": "Jane", "last name": "Doe", birthday: "1982", gender: "F" },
-        rels: { spouses: ["1"], children: ["3"] },
-      },
-      {
-        id: "3",
-        data: { "first name": "Bob", "last name": "Doe", birthday: "2005", gender: "M" },
-        rels: { parents: ["1", "2"] },
-      },
-    ];
-
-    try {
-      const f3Chart = f3.createChart(chartRef.current, data);
-      chartInstanceRef.current = f3Chart;
       f3Chart.setCardHtml().setCardDisplay([["first name", "last name"], ["birthday"]]);
-      f3Chart.updateTree({ initial: true });
-    } catch (error) {
-      console.error("Error rendering chart:", error);
-    }
 
-    return () => {
-      chartInstanceRef.current = null;
-      if (chartRef.current) chartRef.current.innerHTML = "";
-    };
+      f3Chart.updateTree({ initial: true });
+    }
   }, []);
 
   return (
