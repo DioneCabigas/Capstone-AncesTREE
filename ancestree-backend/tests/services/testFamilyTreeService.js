@@ -4,11 +4,10 @@ const db = admin.firestore();
 const familyTreesCollection = db.collection("testFamilyTrees");
 const personsCollection = db.collection("testPersons");
 
-exports.createFamilyTree = async (ownerId, treeName, type = "personal") => {
+exports.createFamilyTree = async (ownerId, treeName) => {
   const ref = await familyTreesCollection.add({
     ownerId,
     treeName,
-    type,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
   return ref.id;
