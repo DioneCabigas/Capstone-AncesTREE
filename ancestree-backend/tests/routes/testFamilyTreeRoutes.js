@@ -1,11 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const testFamilyTreeController = require("../controllers/testFamilyTreeController");
+const controller = require("../controllers/testFamilyTreeController");
 
-router.post("/", testFamilyTreeController.createFamilyTree);
-router.post("/:treeId/persons", testFamilyTreeController.createPerson);
-router.get("/:treeId/chart", testFamilyTreeController.getFamilyTreeChart);
-router.post("/relationships/parent-child", testFamilyTreeController.addParentChild);
-router.post("/relationships/spouse", testFamilyTreeController.addSpouse);
+router.post("/", controller.createFamilyTree);
+router.post("/:treeId/persons", controller.createPerson);
+router.get("/:treeId/chart", controller.getFamilyTreeChart);
+
+router.post("/:treeId/link", controller.linkPerson);
+router.post("/:treeId/duplicates", controller.findDuplicates);
+
+router.post("/merge", controller.mergeTrees);
+router.post("/:treeId/merge-persons", controller.mergePersons);
 
 module.exports = router;
