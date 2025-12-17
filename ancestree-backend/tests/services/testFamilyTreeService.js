@@ -4,10 +4,11 @@ const db = admin.firestore();
 const familyTreesCollection = db.collection("testFamilyTrees");
 const personsCollection = db.collection("testPersons");
 
-exports.createFamilyTree = async (ownerId, treeName) => {
+exports.createFamilyTree = async (ownerId, treeName, type = "personal") => {
   const ref = await familyTreesCollection.add({
     ownerId,
     treeName,
+    type,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
   return ref.id;
@@ -134,26 +135,32 @@ exports.linkExistingPerson = async (treeId, sourceId, targetId, relationship) =>
   });
 };
 
-exports.mergeTreesIntoFamilyGroup = async (ownerId, sourceTreeIds, newTreeName) => {
-  const newTreeId = await exports.createFamilyTree(ownerId, newTreeName);
-
+exports.importPersonalTreeIntoGroupTree = async (groupTreeId, personalTreeId) => {
   const snapshot = await personsCollection
-    .where("treeId", "in", sourceTreeIds)
+    .where("treeId", "==", personalTreeId)
     .get();
 
+  if (snapshot.empty) return [];
+
   const idMap = {};
+  const importedIds = [];
 
   for (const doc of snapshot.docs) {
     const p = doc.data();
     const ref = await personsCollection.add({
-      ...p,
-      treeId: newTreeId,
+      treeId: groupTreeId,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      gender: p.gender,
+      birthDate: p.birthDate,
+      deathDate: p.deathDate,
       parents: [],
       spouses: [],
       children: [],
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
     idMap[doc.id] = ref.id;
+    importedIds.push(ref.id);
   }
 
   for (const doc of snapshot.docs) {
@@ -163,7 +170,7 @@ exports.mergeTreesIntoFamilyGroup = async (ownerId, sourceTreeIds, newTreeName) 
     for (const parentId of p.parents || []) {
       if (idMap[parentId]) {
         await exports.linkExistingPerson(
-          newTreeId,
+          groupTreeId,
           newId,
           idMap[parentId],
           "parent"
@@ -174,7 +181,7 @@ exports.mergeTreesIntoFamilyGroup = async (ownerId, sourceTreeIds, newTreeName) 
     for (const spouseId of p.spouses || []) {
       if (idMap[spouseId]) {
         await exports.linkExistingPerson(
-          newTreeId,
+          groupTreeId,
           newId,
           idMap[spouseId],
           "spouse"
@@ -183,7 +190,7 @@ exports.mergeTreesIntoFamilyGroup = async (ownerId, sourceTreeIds, newTreeName) 
     }
   }
 
-  return newTreeId;
+  return importedIds;
 };
 
 exports.getFamilyTreeChart = async (treeId) => {
