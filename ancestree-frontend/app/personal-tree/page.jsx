@@ -50,6 +50,33 @@ function PersonalTree() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
+  // Listen for auth state changes to get current user info
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        console.log("User logged in:", user.uid);
+        setCurrentUserId(user.uid);
+        try {
+          const profileResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${user.uid}`);
+          setCurrentUser(profileResponse.data);
+          console.log("Fetched user profile: ", profileResponse.data);
+        } catch (error) {
+          console.log("Failed to fetch current user profile.", error);
+        }
+      } else {
+        console.log("User logged out.");
+        setCurrentUser(null);
+        setCurrentUserId(null);
+        setTreeId(null);
+      }
+    });
+
+    return () => {
+      console.log("Cleaning up auth state listener.");
+      unsubscribe();
+    };
+  }, []);
+
   // Ensure we always show the form tab when entering edit mode
   useEffect(() => {
     if (isEditMode && activeTab !== "form") {
@@ -236,6 +263,7 @@ function PersonalTree() {
     }
   };
 
+  // FETCH TREE DATA FUNCTION
   const fetchTreeData = async (uid, isCurrentUsersTreeBool) => {
     if (!uid) {
       console.warn("Cannot fetch tree data: UID is null."); //test
@@ -249,7 +277,7 @@ function PersonalTree() {
     setIsLoading(true);
     let treeIdToUse = null;
     try {
-      const treeResponse = await axios.get(`${BACKEND_BASE_URL}/api/tree/${uid}`);
+      const treeResponse = await axios.get(`${BACKEND_BASE_URL}/api/family-trees/personal/${uid}`);
 
       const fetchedTreeData = treeResponse.data;
       // setTreeData(treeResponse.data);
@@ -265,7 +293,8 @@ function PersonalTree() {
       // fetch persons for the tree
       if (treeIdToUse) {
         console.log("Fetching persons for tree ID:", treeIdToUse);
-        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
+        // const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
+        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/test/family-trees/${treeIdToUse}/chart`);
         const fetchedPersons = personsResponse.data;
         console.log("Fetched persons data:", fetchedPersons);
         setTreeData({ ...fetchedTreeData, persons: fetchedPersons });
@@ -277,21 +306,21 @@ function PersonalTree() {
     }
   };
 
-  // // FETCH TREE DATA USE EFFECT
-  // useEffect(() => {
-  //   if (externalUid !== currentUserId) {
-  //     const isCurrentUsersTreeBool = false;
-  //     fetchTreeData(externalUid, currentUser, isCurrentUsersTreeBool);
-  //     setIsCurrentUsersTree(false);
-  //   } else if (currentUserId && currentUser) {
-  //     const isCurrentUsersTreeBool = true;
-  //     console.log("Both UID and User Profile are ready. Fetching tree data.");
-  //     setIsCurrentUsersTree(true);
-  //     fetchTreeData(currentUserId, currentUser, isCurrentUsersTreeBool);
-  //   } else if (!currentUserId && !currentUser) {
-  //     console.log("User logged out or profile not loaded yet.");
-  //   }
-  // }, [currentUserId, currentUser, externalUid]);
+  // FETCH TREE DATA USE EFFECT
+  useEffect(() => {
+    if (externalUid !== currentUserId) {
+      const isCurrentUsersTreeBool = false;
+      fetchTreeData(externalUid, isCurrentUsersTreeBool);
+      setIsCurrentUsersTree(false);
+    } else if (currentUserId && currentUser) {
+      const isCurrentUsersTreeBool = true;
+      console.log("Both UID and User Profile are ready. Fetching tree data.");
+      setIsCurrentUsersTree(true);
+      fetchTreeData(currentUserId, isCurrentUsersTreeBool);
+    } else if (!currentUserId && !currentUser) {
+      console.log("User logged out or profile not loaded yet.");
+    }
+  }, [currentUserId, currentUser, externalUid]);
 
   // Initialize family chart when the chart element is ready (the chart only initializes when the DOM element is definitely ready)
   // This fixes issues with the chart not rendering properly on first load
@@ -304,23 +333,44 @@ function PersonalTree() {
 
     try {
       console.log("Creating family chart...");
-      const data = [
-        {
-          id: "1",
-          data: { "first name": "Charles Dominic", "last name": "Hordista", birthday: "1980", gender: "M" },
-          rels: { spouses: ["2"], children: ["3"] },
-        },
-        {
-          id: "2",
-          data: { "first name": "Jane", "last name": "Doe", birthday: "1982", gender: "F" },
-          rels: { spouses: ["1"], children: ["3"] },
-        },
-        {
-          id: "3",
-          data: { "first name": "Ben", "last name": "Doe", birthday: "2005", gender: "M" },
-          rels: { parents: ["1", "2"] },
-        },
-      ];
+
+      // const data = [
+      //   {
+      //     id: "1",
+      //     data: { "first name": "Charles Dominic", "last name": "Hordista", birthday: "1980", gender: "M" },
+      //     rels: { spouses: ["2"], children: ["3"] },
+      //   },
+      //   {
+      //     id: "2",
+      //     data: { "first name": "Jane", "last name": "Doe", birthday: "1982", gender: "F" },
+      //     rels: { spouses: ["1"], children: ["3"] },
+      //   },
+      //   {
+      //     id: "3",
+      //     data: { "first name": "Ben", "last name": "Doe", birthday: "2005", gender: "M" },
+      //     rels: { parents: ["1", "2"] },
+      //   },
+      // ];
+
+      // Map treeData to f3 chart format
+      const data = treeData?.persons
+        ? treeData.persons.map((person) => ({
+            id: person.id,
+            data: {
+              "first name": person.data.firstName,
+              "last name": person.data.lastName,
+              birthday: person.data.birthDate,
+              gender: person.data.gender === "Male" ? "M" : "F",
+            },
+            rels: {
+              // spouses: person.rels?.filter((r) => r.type === "spouse").map((r) => r.relatedPersonId) || [],
+              // children: person.rels?.filter((r) => r.type === "child").map((r) => r.relatedPersonId) || [],
+              // parents: person.rels?.filter((r) => r.type === "parent").map((r) => r.relatedPersonId) || [],
+            },
+          }))
+        : [];
+
+      console.log("Mapped chart data:", data);
 
       const f3Chart = f3
         .createChart("#FamilyChart", data)
@@ -409,33 +459,6 @@ function PersonalTree() {
     };
   }, [isChartReady]);
 
-  // Listen for auth state changes to get current user info
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        console.log("User logged in:", user.uid);
-        setCurrentUserId(user.uid);
-        try {
-          const profileResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${user.uid}`);
-          setCurrentUser(profileResponse.data);
-          console.log("Fetched user profile: ", profileResponse.data);
-        } catch (error) {
-          console.log("Failed to fetch current user profile.", error);
-        }
-      } else {
-        console.log("User logged out.");
-        setCurrentUser(null);
-        setCurrentUserId(null);
-        setTreeId(null);
-      }
-    });
-
-    return () => {
-      console.log("Cleaning up auth state listener.");
-      unsubscribe();
-    };
-  }, []);
-
   return (
     <Layout>
       <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
@@ -452,7 +475,7 @@ function PersonalTree() {
         {/* Loading Spinner */}
         {isLoading && (
           <div className="fixed inset-0 z-45 flex justify-center items-center" style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}>
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
+            {/* <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div> */}
           </div>
         )}
 
