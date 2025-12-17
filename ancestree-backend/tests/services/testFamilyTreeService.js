@@ -17,9 +17,12 @@ exports.createPerson = async (treeId, data) => {
   const ref = await personsCollection.add({
     treeId,
     firstName: data.firstName,
+    middleName: data.middleName,
     lastName: data.lastName,
+    status: data.status,
     gender: data.gender || null,
     birthDate: data.birthDate || null,
+    birthPlace: data.birthPlace || null,
     deathDate: data.deathDate || null,
     parents: [],
     spouses: [],
