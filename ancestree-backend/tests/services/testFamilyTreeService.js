@@ -4,106 +4,288 @@ const db = admin.firestore();
 const familyTreesCollection = db.collection("testFamilyTrees");
 const personsCollection = db.collection("testPersons");
 
-
-exports.createFamilyTree = async (userId, treeName) => {
-  const familyTree = {
-    ownerId: userId,
-    name: treeName,
+exports.createFamilyTree = async (ownerId, treeName) => {
+  const ref = await familyTreesCollection.add({
+    ownerId,
+    treeName,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
-  };
-
-  const docRef = await familyTreesCollection.add(familyTree);
-  return docRef.id;
+  });
+  return ref.id;
 };
 
-
-exports.createPerson = async (treeId, personData) => {
-  const person = {
+exports.createPerson = async (treeId, data) => {
+  const ref = await personsCollection.add({
     treeId,
-    firstName: personData.firstName,
-    lastName: personData.lastName,
-    gender: personData.gender || null,
-    birthDate: personData.birthDate || null,
-    deathDate: personData.deathDate || null,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    gender: data.gender || null,
+    birthDate: data.birthDate || null,
+    deathDate: data.deathDate || null,
     parents: [],
     spouses: [],
     children: [],
     createdAt: admin.firestore.FieldValue.serverTimestamp()
-  };
-
-  const docRef = await personsCollection.add(person);
-  return docRef.id;
+  });
+  return ref.id;
 };
 
+exports.getPersonsByTreeId = async (treeId) => {
+  const snapshot = await personsCollection.where("treeId", "==", treeId).get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
 
-exports.getFamilyTreeChart = async (treeId) => {
+exports.findDuplicateCandidates = async (treeId, personData) => {
   const snapshot = await personsCollection
     .where("treeId", "==", treeId)
+    .where("lastName", "==", personData.lastName)
     .get();
 
-  return snapshot.docs.map(doc => {
-    const data = doc.data();
+  return snapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .filter(p => {
+      const firstMatch =
+        p.firstName.toLowerCase() === personData.firstName.toLowerCase();
+      const birthMatch =
+        !p.birthDate ||
+        !personData.birthDate ||
+        p.birthDate === personData.birthDate;
+      return firstMatch && birthMatch;
+    });
+};
 
+const isAncestor = async (descendantId, ancestorId) => {
+  const stack = [descendantId];
+  const visited = new Set();
+
+  while (stack.length) {
+    const current = stack.pop();
+    if (visited.has(current)) continue;
+    visited.add(current);
+
+    const snap = await personsCollection.doc(current).get();
+    if (!snap.exists) continue;
+
+    const parents = snap.data().parents || [];
+    if (parents.includes(ancestorId)) return true;
+
+    stack.push(...parents);
+  }
+
+  return false;
+};
+
+exports.linkExistingPerson = async (treeId, sourceId, targetId, relationship) => {
+  if (sourceId === targetId) {
+    throw new Error("Cannot link person to themselves");
+  }
+
+  const sourceRef = personsCollection.doc(sourceId);
+  const targetRef = personsCollection.doc(targetId);
+
+  await db.runTransaction(async (tx) => {
+    const sourceSnap = await tx.get(sourceRef);
+    const targetSnap = await tx.get(targetRef);
+
+    if (!sourceSnap.exists || !targetSnap.exists) {
+      throw new Error("Person not found");
+    }
+
+    const source = sourceSnap.data();
+    const target = targetSnap.data();
+
+    if (source.treeId !== treeId || target.treeId !== treeId) {
+      throw new Error("Persons must belong to the same tree");
+    }
+
+    if (relationship === "parent") {
+      if ((source.parents || []).length >= 2) {
+        throw new Error("A person can only have two parents");
+      }
+
+      if (await isAncestor(sourceId, targetId)) {
+        throw new Error("Cycle detected");
+      }
+
+      tx.update(sourceRef, {
+        parents: admin.firestore.FieldValue.arrayUnion(targetId)
+      });
+
+      tx.update(targetRef, {
+        children: admin.firestore.FieldValue.arrayUnion(sourceId)
+      });
+    }
+
+    if (relationship === "spouse") {
+      if (
+        (source.parents || []).includes(targetId) ||
+        (source.children || []).includes(targetId)
+      ) {
+        throw new Error("Invalid spouse relationship");
+      }
+
+      tx.update(sourceRef, {
+        spouses: admin.firestore.FieldValue.arrayUnion(targetId)
+      });
+
+      tx.update(targetRef, {
+        spouses: admin.firestore.FieldValue.arrayUnion(sourceId)
+      });
+    }
+  });
+};
+
+exports.mergeTreesIntoFamilyGroup = async (ownerId, sourceTreeIds, newTreeName) => {
+  const newTreeId = await exports.createFamilyTree(ownerId, newTreeName);
+
+  const snapshot = await personsCollection
+    .where("treeId", "in", sourceTreeIds)
+    .get();
+
+  const idMap = {};
+
+  for (const doc of snapshot.docs) {
+    const p = doc.data();
+    const ref = await personsCollection.add({
+      ...p,
+      treeId: newTreeId,
+      parents: [],
+      spouses: [],
+      children: [],
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    idMap[doc.id] = ref.id;
+  }
+
+  for (const doc of snapshot.docs) {
+    const p = doc.data();
+    const newId = idMap[doc.id];
+
+    for (const parentId of p.parents || []) {
+      if (idMap[parentId]) {
+        await exports.linkExistingPerson(
+          newTreeId,
+          newId,
+          idMap[parentId],
+          "parent"
+        );
+      }
+    }
+
+    for (const spouseId of p.spouses || []) {
+      if (idMap[spouseId]) {
+        await exports.linkExistingPerson(
+          newTreeId,
+          newId,
+          idMap[spouseId],
+          "spouse"
+        );
+      }
+    }
+  }
+
+  return newTreeId;
+};
+
+exports.getFamilyTreeChart = async (treeId) => {
+  const snapshot = await personsCollection.where("treeId", "==", treeId).get();
+
+  return snapshot.docs.map(doc => {
+    const p = doc.data();
     return {
       id: doc.id,
       data: {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        gender: data.gender,
-        birthDate: data.birthDate,
-        deathDate: data.deathDate
+        firstName: p.firstName,
+        lastName: p.lastName,
+        gender: p.gender,
+        birthDate: p.birthDate,
+        deathDate: p.deathDate
       },
       rels: {
-        parents: data.parents || [],
-        spouses: data.spouses || [],
-        children: data.children || []
+        parents: p.parents || [],
+        spouses: p.spouses || [],
+        children: p.children || []
       }
     };
   });
 };
 
-
-exports.addParentChild = async (parentId, childId) => {
-  const parentRef = personsCollection.doc(parentId);
-  const childRef = personsCollection.doc(childId);
+exports.mergePersons = async (treeId, primaryId, secondaryId) => {
+  if (primaryId === secondaryId) {
+    throw new Error("Cannot merge the same person");
+  }
 
   await db.runTransaction(async (tx) => {
-    const parentSnap = await tx.get(parentRef);
-    const childSnap = await tx.get(childRef);
+    const primaryRef = personsCollection.doc(primaryId);
+    const secondaryRef = personsCollection.doc(secondaryId);
 
-    if (!parentSnap.exists || !childSnap.exists) {
+    const primarySnap = await tx.get(primaryRef);
+    const secondarySnap = await tx.get(secondaryRef);
+
+    if (!primarySnap.exists || !secondarySnap.exists) {
       throw new Error("Person not found");
     }
 
-    tx.update(parentRef, {
-      children: admin.firestore.FieldValue.arrayUnion(childId)
-    });
+    const primary = primarySnap.data();
+    const secondary = secondarySnap.data();
 
-    tx.update(childRef, {
-      parents: admin.firestore.FieldValue.arrayUnion(parentId)
-    });
-  });
-};
-
-
-exports.addSpouse = async (personAId, personBId) => {
-  const personARef = personsCollection.doc(personAId);
-  const personBRef = personsCollection.doc(personBId);
-
-  await db.runTransaction(async (tx) => {
-    const aSnap = await tx.get(personARef);
-    const bSnap = await tx.get(personBRef);
-
-    if (!aSnap.exists || !bSnap.exists) {
-      throw new Error("Person not found");
+    if (primary.treeId !== treeId || secondary.treeId !== treeId) {
+      throw new Error("Persons must belong to the same tree");
     }
 
-    tx.update(personARef, {
-      spouses: admin.firestore.FieldValue.arrayUnion(personBId)
+    const mergedParents = Array.from(
+      new Set([...(primary.parents || []), ...(secondary.parents || [])])
+    ).slice(0, 2);
+
+    const mergedChildren = Array.from(
+      new Set([...(primary.children || []), ...(secondary.children || [])])
+    );
+
+    const mergedSpouses = Array.from(
+      new Set([...(primary.spouses || []), ...(secondary.spouses || [])])
+    );
+
+    tx.update(primaryRef, {
+      parents: mergedParents,
+      children: mergedChildren,
+      spouses: mergedSpouses
     });
 
-    tx.update(personBRef, {
-      spouses: admin.firestore.FieldValue.arrayUnion(personAId)
+    const snapshot = await personsCollection
+      .where("treeId", "==", treeId)
+      .get();
+
+    snapshot.docs.forEach(doc => {
+      const ref = personsCollection.doc(doc.id);
+      const data = doc.data();
+
+      if ((data.parents || []).includes(secondaryId)) {
+        tx.update(ref, {
+          parents: admin.firestore.FieldValue.arrayRemove(secondaryId)
+        });
+        tx.update(ref, {
+          parents: admin.firestore.FieldValue.arrayUnion(primaryId)
+        });
+      }
+
+      if ((data.children || []).includes(secondaryId)) {
+        tx.update(ref, {
+          children: admin.firestore.FieldValue.arrayRemove(secondaryId)
+        });
+        tx.update(ref, {
+          children: admin.firestore.FieldValue.arrayUnion(primaryId)
+        });
+      }
+
+      if ((data.spouses || []).includes(secondaryId)) {
+        tx.update(ref, {
+          spouses: admin.firestore.FieldValue.arrayRemove(secondaryId)
+        });
+        tx.update(ref, {
+          spouses: admin.firestore.FieldValue.arrayUnion(primaryId)
+        });
+      }
     });
+
+    tx.delete(secondaryRef);
   });
 };
