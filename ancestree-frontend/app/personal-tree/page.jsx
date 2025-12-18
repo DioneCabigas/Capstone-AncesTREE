@@ -49,6 +49,7 @@ function PersonalTree() {
   const [activeTab, setActiveTab] = useState("form");
   const [isEditMode, setIsEditMode] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [selectedPersonId, setSelectedPersonId] = useState(null);
 
   // Listen for auth state changes to get current user info
   useEffect(() => {
@@ -114,8 +115,33 @@ function PersonalTree() {
     }
   };
 
-  const openSidebar = () => {
+  const openSidebar = async (personData) => {
+    setSelectedPersonId(personData.id);
     setSidebarOpen(true);
+
+    const d = personData.data || {};
+
+    setFormData({
+      ...initialFormData,
+      firstName: d["first name"] ?? "",
+      middleName: d["middle name"] ?? "",
+      lastName: d["last name"] ?? "",
+      birthDate: d.birthday ?? "",
+      gender: d.gender === "M" ? "male" : d.gender === "F" ? "female" : "",
+      // status/dateOfDeath/placeOfDeath map here if you have them in `d`
+    });
+    console.log("PersonId in openSidebar:", personData.id);
+
+    if (treeData.persons.length > 0) {
+      setSuggestionsLoading(true);
+      // await generateSuggestions(personId, treeData.persons); // Pass personId here
+      setSuggestionsLoading(false);
+    } else {
+      console.log("Sidebar opened, but data not ready for suggestions.", {
+        peopleCount: treeData.persons.length,
+      });
+      setSuggestions([]); // Clear suggestions if data isn't ready
+    }
   };
 
   // const openSidebar = async (personId) => {
@@ -162,6 +188,81 @@ function PersonalTree() {
       return;
     }
     setActionMenuOpen(false);
+  };
+
+  // MODIFIED generateSuggestions function
+  const generateSuggestions = async (selectedPersonId, currentPeople) => {
+    let newSuggestions = [];
+
+    // Find the selected person's data
+    const selectedPerson = currentPeople.find((p) => p.personId === selectedPersonId);
+
+    if (!selectedPerson) {
+      console.warn("Selected person not found for generating suggestions.");
+      setSuggestions([]); // Clear suggestions if person not found
+      return;
+    }
+
+    // --- Rule: Suggest People with Same Last Name as the selectedPerson ---
+    if (selectedPerson.lastName) {
+      try {
+        const lastNameToSearch = selectedPerson.lastName;
+        console.log("Generating last name suggestions for:", selectedPerson.firstName, lastNameToSearch);
+
+        const matchingUsers = await performSuggestionsSearch(lastNameToSearch, "", "");
+
+        const filteredMatchingUsers = matchingUsers.filter(
+          (user) =>
+            user.id !== currentUserId && // Exclude the currently logged-in user
+            !(
+              // Exclude the selected person based on their name
+              (
+                user.firstName?.toLowerCase() === selectedPerson.firstName?.toLowerCase() &&
+                (user.middleName?.toLowerCase() || "") === (selectedPerson.middleName?.toLowerCase() || "") &&
+                user.lastName?.toLowerCase() === selectedPerson.lastName?.toLowerCase()
+              )
+            ) &&
+            // Exclude any other person already in the current tree based on first and last name
+            !currentPeople.some(
+              (treePerson) =>
+                treePerson.firstName?.toLowerCase() === user.firstName?.toLowerCase() &&
+                treePerson.lastName?.toLowerCase() === user.lastName?.toLowerCase()
+              // OPTIONAL IMPROVEMENT: If both 'treePerson' and 'user' have 'birthDate', add it for higher accuracy:
+              // && treePerson.birthDate === user.birthDate
+            )
+        );
+
+        filteredMatchingUsers.forEach((user) => {
+          newSuggestions.push({
+            id: user.id, // Unique ID
+            type: "same_last_name",
+            targetUserId: user.id,
+            name: `${user.firstName} ${user.lastName}`,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            details: `This user shares the last name "${lastNameToSearch}" with ${selectedPerson.firstName}.`,
+            potentialConnection: {
+              // Data structure for handleAddToTree
+              personId: user.id,
+              firstName: user.firstName,
+              middleName: user.middleName || "",
+              lastName: user.lastName,
+              birthDate: user.birthDate || "",
+              birthPlace: user.birthPlace || "",
+              gender: user.gender || "",
+              status: user.status || "living",
+              dateOfDeath: "",
+              placeOfDeath: "",
+            },
+          });
+        });
+      } catch (error) {
+        console.error("Error fetching users by last name for suggestions:", error);
+      }
+    }
+
+    setSuggestions(newSuggestions);
+    console.log("Suggestions: ", suggestions);
   };
 
   const handleAddPerson = async () => {
@@ -322,13 +423,20 @@ function PersonalTree() {
     }
   }, [currentUserId, currentUser, externalUid]);
 
+  // USE LAYOUT EFFECT TO INITIALIZE CHART
   // Initialize family chart when the chart element is ready (the chart only initializes when the DOM element is definitely ready)
   // This fixes issues with the chart not rendering properly on first load
   useLayoutEffect(() => {
     // Do nothing if the container is not ready
     if (!isChartReady || !chartRef.current) return;
 
-    // Prevent creating the chart more than once
+    // Wait for treeData to be loaded
+    if (!treeData?.persons || treeData.persons.length === 0) {
+      console.log("Waiting for tree data to load...");
+      return;
+    }
+
+    // // Prevent creating the chart more than once
     if (chartInstanceRef.current) return;
 
     try {
@@ -363,17 +471,21 @@ function PersonalTree() {
               gender: person.data.gender === "Male" ? "M" : "F",
             },
             rels: {
-              // spouses: person.rels?.filter((r) => r.type === "spouse").map((r) => r.relatedPersonId) || [],
-              // children: person.rels?.filter((r) => r.type === "child").map((r) => r.relatedPersonId) || [],
-              // parents: person.rels?.filter((r) => r.type === "parent").map((r) => r.relatedPersonId) || [],
+              spouses: person.rels?.spouses || [],
+              children: person.rels?.children || [],
+              parents: person.rels?.parents || [],
             },
           }))
         : [];
 
       console.log("Mapped chart data:", data);
 
+      // Clear previous chart DOM (VERY IMPORTANT)
+      d3.select(chartRef.current).selectAll("*").remove();
+
       const f3Chart = f3
-        .createChart("#FamilyChart", data)
+        // .createChart("#FamilyChart", data)
+        .createChart(chartRef.current, data) // ← better than "#FamilyChart"
         .setTransitionTime(700)
         .setCardXSpacing(400) // Default 250
         .setCardYSpacing(150) // Default 150
@@ -408,7 +520,8 @@ function PersonalTree() {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(true);
-              setSidebarOpen(true);
+              openSidebar(d.data);
+              console.log("Editing person:", d);
             });
           // ADD PERSON CARD BUTTON
           d3.select(card)
@@ -428,21 +541,13 @@ function PersonalTree() {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(false);
-              setSidebarOpen(true);
+              openSidebar(d.data);
             });
         });
 
-      // f3Card.setOnCardClick(() => {
-      //   console.log("Card clicked: ");
-      //   // setSidebarOpen(true);
-      // });
-
-      // const f3EditTree = f3Chart.editTree().fixed(true).setFields(["first name", "last name", "birthday", "avatar"]).setEditFirst(true).setCardClickOpen(f3Card);
-      // f3EditTree.setEdit();
-
       f3Chart.updateTree({ initial: true });
       // f3EditTree.open(f3Chart.getMainDatum());
-      f3Chart.updateTree({ initial: true });
+      // f3Chart.updateTree({ initial: true });
 
       // Store chart instance for later use
       chartInstanceRef.current = f3Chart;
@@ -455,9 +560,10 @@ function PersonalTree() {
     // Cleanup when component unmounts
     return () => {
       console.log("Cleaning up family chart");
+      d3.select(chartRef.current).selectAll("*").remove(); // CLEANUP LIKE ABOVE
       chartInstanceRef.current = null;
     };
-  }, [isChartReady]);
+  }, [isChartReady, treeData]);
 
   return (
     <Layout>
@@ -479,56 +585,6 @@ function PersonalTree() {
           </div>
         )}
 
-        {/* Person Details Modal */}
-        {/* {isModalOpen && personDetailsInModal && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeModal}>
-            {" "}
-            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">
-                {personDetailsInModal.firstName} {personDetailsInModal.middleName && personDetailsInModal.middleName + " "}
-                {personDetailsInModal.lastName}
-              </h2>
-
-              <div className="space-y-2 text-gray-700">
-                <p>
-                  <strong>Gender:</strong> {personDetailsInModal.gender}
-                </p>
-                {personDetailsInModal.birthDate && (
-                  <p>
-                    <strong>Birth Date:</strong> {personDetailsInModal.birthDate}
-                  </p>
-                )}
-                {personDetailsInModal.birthPlace && (
-                  <p>
-                    <strong>Birth Place:</strong> {personDetailsInModal.birthPlace}
-                  </p>
-                )}
-                <p>
-                  <strong>Status:</strong> {personDetailsInModal.status}
-                </p>
-                {personDetailsInModal.status === "deceased" && personDetailsInModal.dateOfDeath && (
-                  <p>
-                    <strong>Date of Death:</strong> {personDetailsInModal.dateOfDeath}
-                  </p>
-                )}
-                {personDetailsInModal.status === "deceased" && personDetailsInModal.placeOfDeath && (
-                  <p>
-                    <strong>Place of Death:</strong> {personDetailsInModal.placeOfDeath}
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-6 flex justify-end">
-                <button onClick={closeModal} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )} */}
-
-        {/* May not work? clicking outside of action menu closes menu */}
-        {/* {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />} */}
         {/* Overlay for sidebar */}
         {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}
         {/* Sidebar */}
