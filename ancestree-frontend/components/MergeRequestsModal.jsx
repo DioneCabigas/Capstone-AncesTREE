@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, Check, User } from 'lucide-react';
 import axios from 'axios';
+import { getInitials } from '@/app/utils/helpers';
 
 const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequestHandled, currentUserId }) => {
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
@@ -32,11 +33,6 @@ const MergeRequestsModal = ({ isOpen, onClose, groupId, mergeRequests, onRequest
       console.error('Error denying merge request:', error);
       alert('Failed to deny merge request');
     }
-  };
-
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return 'N/A';
-    return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
   };
 
   const formatDate = (dateString) => {

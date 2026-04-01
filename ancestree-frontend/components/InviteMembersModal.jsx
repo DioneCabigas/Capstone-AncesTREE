@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { getInitials } from '@/app/utils/helpers';
 import { User as UserIcon, X as XMark, Copy as CopyIcon } from 'lucide-react';
 
 function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, onInviteSuccess }) {
@@ -12,12 +13,6 @@ function InviteMembersModal({ groupId, existingMembers, currentUserId, onClose, 
   const [notification, setNotification] = useState({ message: '', type: '' });
 
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
-
-  // Helper to get initials for avatars
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return 'N/A';
-    return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
-  };
 
   // Display Notification (Removed after 3secs)
   const showNotification = (message, type) => {

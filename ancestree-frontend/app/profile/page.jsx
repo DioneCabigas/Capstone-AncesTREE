@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from "next/navigation";
 import AuthController from '@/components/AuthController';
 import Layout from '../../components/Layout';
-import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
+import ProfileGallery from '@/components/ProfileGallery';
 import axios from 'axios';
-
-axios.defaults.baseURL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
+import { Edit, Save, X, User, MapPin, Calendar, Phone, Heart, ChevronDown, Trash2, Check, X as XMark } from 'lucide-react';
 
 function ProfilePage() {
+  const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const [currentUser, setCurrentUser] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
   const [isOwnProfile, setIsOwnProfile] = useState(true);
@@ -57,6 +57,7 @@ function ProfilePage() {
   
   // Get the userId from URL query params (for viewing other profiles)
   const userIdFromQuery = searchParams.get('userId');
+  const galleryOwnerId = (userIdFromQuery || (isOwnProfile ? currentUser?.uid : profileUser?.uid || currentUser?.uid || userData.userId));
 
   // Modify your existing useEffect that runs when userIdFromQuery changes
   useEffect(() => {
@@ -86,8 +87,9 @@ function ProfilePage() {
               userId: targetUserId
             }));
 
-            // If viewing another user's profile, store their info in profileUser
-            if (!isOwn) {
+            if (isOwn) {
+              setProfileUser(null);
+            } else {
               setProfileUser({
                 uid: targetUserId,
                 ...data
@@ -1162,6 +1164,15 @@ function ProfilePage() {
           >
             Personal Details
           </button>
+
+          <button 
+            className={`py-3 px-6 font-medium ${activeTab === "gallery" 
+              ? "text-[#313131] border-b-2 border-[#313131]"
+              : "text-[#4F6F52] hover:text-[#313131]"}`}
+            onClick={() => setActiveTab("gallery")}
+          >
+            Gallery
+          </button>
             
           {isOwnProfile && (
             <button 
@@ -1304,6 +1315,10 @@ function ProfilePage() {
               {/* Content based on selected section - Toggle between edit fields and view fields */}
               {isOwnProfile && editMode ? renderEditFields() : renderViewFields()}
             </div>
+          </div>
+        ) : activeTab === "gallery" ? (
+          <div className="bg-white border border-[#ffffff] rounded-lg p-6">
+            <ProfileGallery ownerId={galleryOwnerId} showUpload={isOwnProfile} />
           </div>
         ) : (
           /* Connections Tab */

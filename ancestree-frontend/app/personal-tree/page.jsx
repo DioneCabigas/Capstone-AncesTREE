@@ -12,24 +12,14 @@ import dagre from "dagre";
 import "reactflow/dist/style.css";
 import PersonNode from "@/components/PersonNode";
 import axios from "axios";
+import { initialPersonFormData } from "@/app/utils/constants";
 
 const nodeTypes = {
   person: PersonNode,
   marriage: () => null,
 };
 
-const initialFormData = {
-  relationship: "",
-  firstName: "",
-  middleName: "",
-  lastName: "",
-  birthDate: "",
-  birthPlace: "",
-  gender: "",
-  status: "living",
-  dateOfDeath: "",
-  placeOfDeath: "",
-};
+const initialFormData = initialPersonFormData;
 
 function PersonalTree() {
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
@@ -220,7 +210,7 @@ function PersonalTree() {
       if (res.status === 200) {
         return res.data.results || []; // Return the results array
       } else {
-        throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);
+        throw new Error(res.data?.message || `HTTP error! status: ${res.status}`);;
       }
     } catch (err) {
       console.error("Error searching for suggestions:", err);

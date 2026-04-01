@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, User as UserIcon, X as XMark, Loader2, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import axios from 'axios';
+import { getInitials } from '@/app/utils/helpers';
 import Link from 'next/link';
 
 export default function SearchBar() {
@@ -20,11 +21,6 @@ export default function SearchBar() {
   const filtersRef = useRef(null);
   
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
-
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return 'N/A';
-    return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
-  };
 
   const performSearch = useCallback(async (term, city, country) => {
     const trimmedTerm = term.trim();

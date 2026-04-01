@@ -12,24 +12,14 @@ import dagre from "dagre";
 import "reactflow/dist/style.css";
 import PersonNode from "@/components/PersonNode";
 import axios from "axios";
+import { initialPersonFormData } from "@/app/utils/constants";
 
 const nodeTypes = {
   person: PersonNode,
   marriage: () => null,
 };
 
-const initialFormData = {
-  relationship: "",
-  firstName: "",
-  middleName: "",
-  lastName: "",
-  birthDate: "",
-  birthPlace: "",
-  gender: "",
-  status: "living",
-  dateOfDeath: "",
-  placeOfDeath: "",
-};
+const initialFormData = initialPersonFormData;
 
 function ViewGroupPage() {
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;

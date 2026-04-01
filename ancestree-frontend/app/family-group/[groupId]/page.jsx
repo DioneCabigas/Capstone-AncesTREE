@@ -5,10 +5,11 @@ import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import axios from "axios";
+import { getInitials } from "@/app/utils/helpers";
 import { ArrowLeft, Edit, User, Users, ChevronDown, Check, X as XMark } from "lucide-react";
 import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import InviteMembersModal from "@/components/InviteMembersModal"; // Import the new modal component
+import InviteMembersModal from "@/components/InviteMembersModal";
 
 function ViewGroupPage() {
   const { groupId } = useParams();
@@ -31,12 +32,6 @@ function ViewGroupPage() {
   const API_FAMILY_GROUPS_PATH = "/api/family-groups";
   const API_FAMILY_GROUP_MEMBERS_PATH = "/api/family-group-members";
   const API_USERS_PATH = "/api/user"; // Added for fetching user details for members
-
-  // Function to get initials for avatars
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return "N/A";
-    return `${firstName ? firstName.charAt(0) : ""}${lastName ? lastName.charAt(0) : ""}`.toUpperCase();
-  };
 
   // Function to fetch group details and all its members with their user details
   const fetchGroupAndMembers = async () => {
