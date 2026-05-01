@@ -3,6 +3,7 @@ const FamilyGroup = require("../entities/FamilyGroup");
 const db = admin.firestore();
 const familyTreeService = require("./familyTreeService");
 const userService = require("./userService");
+const familyGroupMemberService = require("./familyGroupMemberService");
 
 const collection = db.collection("familyGroups");
 
@@ -17,6 +18,9 @@ exports.createGroup = async (userId, treeId, name, description) => {
 
   const group = new FamilyGroup(userId, newTreeId, name, description);
   const docRef = await collection.add(group.toJSON());
+
+  // Add the creator as a Host member
+  await familyGroupMemberService.addMember(docRef.id, userId, "Host", "accepted");
 
   return docRef.id;
 };

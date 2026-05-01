@@ -14,6 +14,7 @@ const searchRoutes = require("./routes/searchRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const familyGroupInvitation = require("./routes/familyGroupInvitationRoutes");
 const mergeRequestRoutes = require("./routes/mergeRequestRoutes");
+const importTreeRequestRoutes = require("./routes/importTreeRequestRoutes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -35,6 +36,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/group-invitation", familyGroupInvitation);
 app.use("/api/merge-requests", mergeRequestRoutes);
+app.use("/api/import-tree-req", importTreeRequestRoutes);
 
 // For testing purposes
 const testRoutes = require("../tests/routes/testRoutes");

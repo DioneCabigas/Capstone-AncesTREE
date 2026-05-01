@@ -1,8 +1,9 @@
 class FamilyGroupInvitation {
-  constructor(groupId, senderId, receiverId, status = 'pending') {
+  constructor(groupId, senderId, receiverId, role = 'Member', status = 'pending') {
     this._groupId = groupId;
     this._senderId = senderId;
     this._receiverId = receiverId;
+    this._role = role;
     this._status = status;
     this._createdAt = new Date();
   }
@@ -17,6 +18,10 @@ class FamilyGroupInvitation {
 
   get receiverId() {
     return this._receiverId;
+  }
+
+  get role() {
+    return this._role;
   }
 
   get status() {
@@ -39,6 +44,14 @@ class FamilyGroupInvitation {
     this._receiverId = value;
   }
 
+  set role(value) {
+    const allowed = ['Host', 'Editor', 'Member'];
+    if (!allowed.includes(value)) {
+      throw new Error(`Invalid role: ${value}`);
+    }
+    this._role = value;
+  }
+
   set status(value) {
     const allowed = ['pending', 'accepted', 'rejected'];
     if (!allowed.includes(value)) {
@@ -59,6 +72,7 @@ class FamilyGroupInvitation {
       groupId: this._groupId,
       senderId: this._senderId,
       receiverId: this._receiverId,
+      role: this._role,
       status: this._status,
       createdAt: this._createdAt,
     };

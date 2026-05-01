@@ -4,7 +4,12 @@ const db = admin.firestore();
 
 const collection = db.collection('familyGroupMembers');
 
-exports.addMember = async (groupId, userId, role, status) => {
+exports.addMember = async (groupId, userId, role = 'Member', status = 'pending') => {
+  const allowedRoles = ['Host', 'Editor', 'Member'];
+  if (!allowedRoles.includes(role)) {
+    throw new Error(`Invalid role: ${role}`);
+  }
+
   const member = new FamilyGroupMember(groupId, userId, role, status);
   const docRef = await collection.add(member.toJSON());
   return docRef.id;

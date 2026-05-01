@@ -1,14 +1,14 @@
 const familyGroupInvitationService = require('../services/familyGroupInvitationService');
 
 exports.sendInvitation = async (req, res) => {
-  const { groupId, senderId, receiverId } = req.body;
+  const { groupId, senderId, receiverId, role = 'Member' } = req.body;
 
   if (!groupId || !senderId || !receiverId) {
     return res.status(400).json({ message: 'Missing required fields.' });
   }
 
   try {
-    const result = await familyGroupInvitationService.sendInvitation(groupId, senderId, receiverId);
+    const result = await familyGroupInvitationService.sendInvitation(groupId, senderId, receiverId, role);
     return res.status(200).json({ message: result });
   } catch (err) {
     console.error('Error sending invitation:', err);

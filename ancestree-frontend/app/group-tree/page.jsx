@@ -6,7 +6,7 @@ import { auth } from "@/app/utils/firebase";
 import Layout from '@/components/Layout';
 import AuthController from '@/components/AuthController';
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import { Edit3, UserPlus } from "lucide-react";
+import { Edit3, UserPlus, Upload, CheckCircle, XCircle } from "lucide-react";
 import axios from "axios";
 import * as d3 from "d3";
 import * as f3 from "family-chart";
@@ -39,6 +39,16 @@ function ViewGroupPage() {
   const [isChartReady, setIsChartReady] = useState(false);
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
+
+  // Import Tree states
+  const [personalTrees, setPersonalTrees] = useState([]);
+  const [importRequests, setImportRequests] = useState([]);
+  const [selectedPersonalTreeId, setSelectedPersonalTreeId] = useState(null);
+  const [selectedPersonalTreePersons, setSelectedPersonalTreePersons] = useState([]);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importPreviewSummary, setImportPreviewSummary] = useState(null);
+  const [isImportRequestLoading, setIsImportRequestLoading] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   const getBackendPersonId = (person) => {
     return (
@@ -156,14 +166,17 @@ function ViewGroupPage() {
   useEffect(() => {
     if (currentUserId) {
       fetchConnectionsData(currentUserId);
+      fetchPersonalTrees(currentUserId);
+      checkUserRole(currentUserId, treeId);
     }
   }, [currentUserId]);
 
   useEffect(() => {
     if (treeId) {
       fetchTreeData(treeId);
+      if (userRole === "Host") fetchImportRequests(treeId);
     }
-  }, [treeId]);
+  }, [treeId, userRole]);
 
   const fetchUserDetails = async (uid) => {
     try {
@@ -203,6 +216,189 @@ function ViewGroupPage() {
     } catch (error) {
       console.error("Error fetching connections data:", error);
       setConnections([]);
+    }
+  };
+
+  const fetchPersonalTrees = async (userId) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-trees/personal/${userId}`);
+      const data = Array.isArray(response.data) ? response.data : (response.data?.trees || response.data?.data || []);
+      setPersonalTrees(data);
+    } catch (error) {
+      console.error("Error fetching personal trees:", error);
+      setPersonalTrees([]);
+    }
+  };
+
+  const checkUserRole = async (userId, treeId) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/group/${treeId}`);
+      const members = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      const member = members.find((item) => item.userId === userId);
+      const role = member?.role || null;
+      setUserRole(role);
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setUserRole(null);
+    }
+  };
+
+  const fetchImportRequests = async (treeId) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/pending`);
+      const data = Array.isArray(response.data) ? response.data : (response.data?.requests || response.data?.data || []);
+      setImportRequests(data);
+    } catch (error) {
+      console.error("Error fetching import requests:", error);
+      setImportRequests([]);
+    }
+  };
+
+  const normalizeName = (value) => String(value || "").trim().toLowerCase();
+
+  const buildImportPreview = (importPeople) => {
+    if (!importPeople || !Array.isArray(importPeople)) {
+      setImportPreview(null);
+      setImportPreviewSummary(null);
+      return;
+    }
+
+    const matches = importPeople.map((importPerson) => {
+      const importedFirstName = normalizeName(importPerson.firstName || importPerson["first name"]);
+      const importedLastName = normalizeName(importPerson.lastName || importPerson["last name"]);
+      const importedBirthDate = String(importPerson.birthDate || importPerson.birthday || "").trim();
+
+      const matchedPerson = people.find((existingPerson) => {
+        const existingSource = existingPerson.data || existingPerson;
+        const existingFirstName = normalizeName(existingSource.firstName || existingSource["first name"]);
+        const existingLastName = normalizeName(existingSource.lastName || existingSource["last name"]);
+        const existingBirthDate = String(existingSource.birthDate || existingSource.birthday || "").trim();
+
+        if (!importedFirstName || !importedLastName || !existingFirstName || !existingLastName) return false;
+
+        const nameMatch = importedFirstName === existingFirstName && importedLastName === existingLastName;
+        const birthMatch = importedBirthDate && existingBirthDate ? importedBirthDate === existingBirthDate : true;
+
+        return nameMatch && birthMatch;
+      });
+
+      return {
+        importPerson,
+        matchedPerson,
+      };
+    });
+
+    const matchedCount = matches.filter((item) => item.matchedPerson).length;
+    setImportPreview(matches);
+    setImportPreviewSummary({
+      groupPersonCount: people.length,
+      importPersonCount: importPeople.length,
+      matchedCount,
+      newPersonCount: importPeople.length - matchedCount,
+    });
+  };
+
+  const fetchPersonalTreePersons = async (personalTreeId) => {
+    if (!personalTreeId) return;
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${personalTreeId}`);
+      const importedPersons = response.data || [];
+      setSelectedPersonalTreePersons(importedPersons);
+      buildImportPreview(importedPersons);
+    } catch (error) {
+      console.error("Error fetching personal tree persons:", error);
+      setSelectedPersonalTreePersons([]);
+      setImportPreview(null);
+      setImportPreviewSummary(null);
+    }
+  };
+
+  const handleSelectPersonalTree = async (personalTreeId) => {
+    setSelectedPersonalTreeId(personalTreeId);
+    await fetchPersonalTreePersons(personalTreeId);
+  };
+
+  const handleSubmitImportRequest = async () => {
+    if (!selectedPersonalTreeId || !treeId) {
+      alert("Please select a personal tree to import.");
+      return;
+    }
+
+    setIsImportRequestLoading(true);
+    try {
+      await axios.post(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/create`, {
+        personalTreeId: selectedPersonalTreeId,
+      });
+      alert("Import request submitted. The host will review it.");
+      if (userRole === "Host") {
+        await fetchImportRequests(treeId);
+      }
+    } catch (error) {
+      console.error("Error submitting import request:", error);
+      alert("Failed to submit import request. Please try again.");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleApproveImportRequest = async (requestId) => {
+    if (!requestId) return;
+    setIsImportRequestLoading(true);
+    try {
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/approve`);
+      if (treeId) {
+        await fetchImportRequests(treeId);
+        await fetchTreeData(treeId);
+      }
+      alert("Import request approved and merged into the group tree.");
+    } catch (error) {
+      console.error("Error approving import request:", error);
+      alert("Failed to approve import request. Please try again.");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleRejectImportRequest = async (requestId) => {
+    if (!requestId) return;
+    setIsImportRequestLoading(true);
+    try {
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/reject`);
+      if (treeId) {
+        await fetchImportRequests(treeId);
+      }
+      alert("Import request rejected.");
+    } catch (error) {
+      console.error("Error rejecting import request:", error);
+      alert("Failed to reject import request. Please try again.");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleMergeSelectedTreeNow = async () => {
+    if (!selectedPersonalTreeId || !treeId) {
+      alert("Please select a personal tree to merge.");
+      return;
+    }
+    if (!importPreview) {
+      alert("Please load tree preview before merging.");
+      return;
+    }
+
+    setIsImportRequestLoading(true);
+    try {
+      await axios.post(`${BACKEND_BASE_URL}/api/group-trees/${treeId}/import`, {
+        personalTreeId: selectedPersonalTreeId,
+        preview: importPreview,
+      });
+      await fetchTreeData(treeId);
+      alert("Selected personal tree has been merged into the group tree.");
+    } catch (error) {
+      console.error("Error merging selected tree:", error);
+      alert("Failed to merge tree. Please try again.");
+    } finally {
+      setIsImportRequestLoading(false);
     }
   };
 
@@ -594,8 +790,11 @@ function ViewGroupPage() {
 
         <div className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
           <div className="border-b border-gray-200">
+            <div className="flex justify-between items-center px-4 py-2">
+              <span className="text-sm font-medium text-gray-700">Role: {userRole || "Loading..."}</span>
+            </div>
             <div className="flex justify-around">
-              {['Add member', 'Connections'].map((tab) => (
+              {['Add member', 'Connections', 'Import Tree'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -826,6 +1025,155 @@ function ViewGroupPage() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {activeTab === "Import Tree" && (
+            <div className="p-6 space-y-4 overflow-y-auto h-full">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Select a personal tree to import</h3>
+                <p className="text-xs text-gray-500">Choose one of your personal trees for merge preview and submit an import request.</p>
+              </div>
+
+              <div className="space-y-3">
+                {personalTrees.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                    No personal trees available for import.
+                  </div>
+                ) : (
+                  personalTrees.map((tree) => (
+                    <button
+                      type="button"
+                      key={tree.treeId || tree.id}
+                      onClick={() => handleSelectPersonalTree(tree.treeId || tree.id)}
+                      className={`w-full border rounded-lg p-4 text-left ${selectedPersonalTreeId === (tree.treeId || tree.id) ? "border-emerald-700 bg-emerald-50" : "border-gray-200 hover:border-gray-300"}`}
+                    >
+                      <div className="flex items-center justify-between gap-x-3">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{tree.name || `Tree ${tree.treeId || tree.id}`}</h4>
+                          <p className="text-xs text-gray-500">{tree.description || `${tree.members?.length || 0} people`}</p>
+                        </div>
+                        {selectedPersonalTreeId === (tree.treeId || tree.id) && <span className="text-xs text-emerald-700">Selected</span>}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedPersonalTreeId && (
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Preview</h4>
+                  {selectedPersonalTreePersons.length === 0 ? (
+                    <p className="text-sm text-gray-500">Loading selected tree members...</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 text-sm text-gray-700 mb-4">
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Group tree size</p>
+                          <p>{people.length} people</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Import tree size</p>
+                          <p>{selectedPersonalTreePersons.length} people</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Matching nodes</p>
+                          <p>{importPreviewSummary?.matchedCount ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">New nodes</p>
+                          <p>{importPreviewSummary?.newPersonCount ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                          The merge preview attempts to match imported people against existing group tree members by first and last name and birth date when available.
+                        </div>
+                        <div className="space-y-2">
+                          {(importPreview || []).slice(0, 10).map((item, index) => (
+                            <div key={`${item.importPerson.personId || item.importPerson.id || index}-${index}`} className="rounded-lg border border-gray-200 p-3">
+                              <p className="font-medium text-gray-800">{item.importPerson.firstName || item.importPerson["first name"]} {item.importPerson.lastName || item.importPerson["last name"]}</p>
+                              <p className="text-xs text-gray-500">{item.importPerson.birthDate || item.importPerson.birthday || "No birth date"}</p>
+                              <p className="text-sm text-gray-700">
+                                {item.matchedPerson ? (
+                                  <>Matches existing member: {item.matchedPerson.firstName || item.matchedPerson["first name"]} {item.matchedPerson.lastName || item.matchedPerson["last name"]}</>
+                                ) : (
+                                  "No match found, this person will be imported as new."
+                                )}
+                              </p>
+                            </div>
+                          ))}
+                          {importPreview && importPreview.length > 10 && (
+                            <div className="text-xs text-gray-500">Showing 10 of {importPreview.length} preview matches.</div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-3 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={handleSubmitImportRequest}
+                  disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                  className="w-full text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: "#365643" }}
+                >
+                  {isImportRequestLoading ? "Submitting request..." : "Submit Import Request"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMergeSelectedTreeNow}
+                  disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                  className="w-full text-[#365643] border border-emerald-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                >
+                  {isImportRequestLoading ? "Merging..." : "Merge Now"}
+                </button>
+              </div>
+
+              {userRole === "Host" && importRequests.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-white p-4 mt-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-gray-900">Pending import requests</h4>
+                    <span className="text-xs text-gray-500">Host controls</span>
+                  </div>
+                  <div className="space-y-3">
+                    {importRequests.map((request) => (
+                      <div key={request.id || request.requestId} className="rounded-lg border border-gray-200 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{request.requestorName || "Unknown requester"}</p>
+                            <p className="text-xs text-gray-500">Requested import for tree {request.personalTreeId || request.treeId}</p>
+                            <p className="text-xs text-gray-500">Created: {new Date(request.createdAt || request.created || Date.now()).toLocaleString()}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleApproveImportRequest(request.requestId || request.id)}
+                              className="text-white px-3 py-1.5 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-800"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRejectImportRequest(request.requestId || request.id)}
+                              className="text-white px-3 py-1.5 rounded text-xs font-medium bg-red-600 hover:bg-red-700"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {request.preview ? `Preview matched ${request.preview.matchedCount} of ${request.preview.importPersonCount} people.` : "No preview available."}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

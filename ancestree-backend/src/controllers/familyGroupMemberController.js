@@ -1,7 +1,7 @@
 const familyGroupMemberService = require('../services/familyGroupMemberService');
 
 exports.addMember = async (req, res) => {
-  const { groupId, userId, role, status } = req.body;
+  const { groupId, userId, role = 'Member', status = 'pending' } = req.body;
 
   if (!groupId || !userId) {
     return res.status(400).json({ message: 'groupId and userId are required.' });
@@ -12,7 +12,7 @@ exports.addMember = async (req, res) => {
     res.status(200).json({ message: 'Member added.', id });
   } catch (error) {
     console.error('Error adding member:', error);
-    res.status(500).json({ message: 'Failed to add member.' });
+    res.status(500).json({ message: error.message || 'Failed to add member.' });
   }
 };
 

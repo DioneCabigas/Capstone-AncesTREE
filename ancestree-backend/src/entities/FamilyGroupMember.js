@@ -36,6 +36,10 @@ class FamilyGroupMember {
   }
 
   set role(value) {
+    const allowed = ['Host', 'Editor', 'Member'];
+    if (!allowed.includes(value)) {
+      throw new Error(`Invalid role: ${value}`);
+    }
     this._role = value;
   }
 
