@@ -222,7 +222,20 @@ function ViewGroupPage() {
   const fetchPersonalTrees = async (userId) => {
     try {
       const response = await axios.get(`${BACKEND_BASE_URL}/api/family-trees/personal/${userId}`);
-      const data = Array.isArray(response.data) ? response.data : (response.data?.trees || response.data?.data || []);
+      let data = [];
+
+      if (Array.isArray(response.data)) {
+        data = response.data;
+      } else if (response.data) {
+        if (response.data.treeId || response.data.id) {
+          data = [response.data];
+        } else if (Array.isArray(response.data.trees)) {
+          data = response.data.trees;
+        } else if (Array.isArray(response.data.data)) {
+          data = response.data.data;
+        }
+      }
+
       setPersonalTrees(data);
     } catch (error) {
       console.error("Error fetching personal trees:", error);
@@ -1088,25 +1101,11 @@ function ViewGroupPage() {
 
                       <div className="space-y-3">
                         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
-                          The merge preview attempts to match imported people against existing group tree members by first and last name and birth date when available.
+                          The merge preview uses summary matching data and hides individual nodes for a cleaner review.
                         </div>
-                        <div className="space-y-2">
-                          {(importPreview || []).slice(0, 10).map((item, index) => (
-                            <div key={`${item.importPerson.personId || item.importPerson.id || index}-${index}`} className="rounded-lg border border-gray-200 p-3">
-                              <p className="font-medium text-gray-800">{item.importPerson.firstName || item.importPerson["first name"]} {item.importPerson.lastName || item.importPerson["last name"]}</p>
-                              <p className="text-xs text-gray-500">{item.importPerson.birthDate || item.importPerson.birthday || "No birth date"}</p>
-                              <p className="text-sm text-gray-700">
-                                {item.matchedPerson ? (
-                                  <>Matches existing member: {item.matchedPerson.firstName || item.matchedPerson["first name"]} {item.matchedPerson.lastName || item.matchedPerson["last name"]}</>
-                                ) : (
-                                  "No match found, this person will be imported as new."
-                                )}
-                              </p>
-                            </div>
-                          ))}
-                          {importPreview && importPreview.length > 10 && (
-                            <div className="text-xs text-gray-500">Showing 10 of {importPreview.length} preview matches.</div>
-                          )}
+                        <div className="rounded-lg border border-gray-200 p-3 bg-white text-sm text-gray-700">
+                          <p className="font-medium text-gray-800">Preview details</p>
+                          <p className="mt-2">Matching details are available in the summary above. Individual node rows are not shown in this preview.</p>
                         </div>
                       </div>
                     </>

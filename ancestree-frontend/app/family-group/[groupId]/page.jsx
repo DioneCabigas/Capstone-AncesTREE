@@ -180,9 +180,9 @@ function ViewGroupPage() {
   // Determine the current user's role in the group for UI conditional rendering (Frontend RBAC)
   const currentUserMembership = members.find((member) => member.userId === currentUserId);
   const currentUserRole = currentUserMembership?.role;
-  const isOwner = currentUserRole === "Owner";
-  const isAdmin = currentUserRole === "Admin";
-  const canEditGroup = isOwner || isAdmin; // Owners and Admins can perform certain edits/invites
+  const isHost = currentUserRole === "Host";
+  const isEditor = currentUserRole === "Editor";
+  const canEditGroup = isHost || isEditor; // Hosts and Editors can perform certain edits/invites
 
   // Get existing member IDs to pass to the invite modal for filtering
   const existingMemberIds = members.map((member) => member.userId);
@@ -250,7 +250,10 @@ function ViewGroupPage() {
         </div>
 
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
+          <div>
+            <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
+            <p className="text-sm text-gray-600 mt-1">Your role: {currentUserRole || "Loading..."}</p>
+          </div>
           <Link href={`/group-tree?treeId=${group.treeId}`}>
             <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">View Tree</button>
           </Link>
@@ -354,8 +357,8 @@ function ViewGroupPage() {
                   {isLeaving ? "Leaving..." : "Leave Group"}
                 </button>
 
-                {/* Show Delete Group button only if current user is the owner */}
-                {isOwner && (
+                {/* Show Delete Group button only if current user is the host */}
+                {isHost && (
                   <button className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md" onClick={() => setShowDeleteConfirmModal(true)}>
                     Delete Group
                   </button>
@@ -389,7 +392,7 @@ function ViewGroupPage() {
                       </div>
                       <p className="text-[#313131] font-medium text-sm text-center">{member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ""}` : "Unknown User"}</p>
                       <p className="text-[#808080] text-xs text-center">{member.role}</p>
-                      {canEditGroup && member.userId !== currentUserId && !(member.role === "Owner" && members.filter((m) => m.role === "Owner").length === 1) && (
+                      {canEditGroup && member.userId !== currentUserId && !(member.role === "Host" && members.filter((m) => m.role === "Host").length === 1) && (
                         <button onClick={() => handleRemoveMemberClick(member)} className="absolute top-1 right-1 text-red-400 hover:text-red-600 p-1 rounded-full bg-white/70 hover:bg-white" title="Remove Member">
                           <XMark className="w-4 h-4" />
                         </button>
