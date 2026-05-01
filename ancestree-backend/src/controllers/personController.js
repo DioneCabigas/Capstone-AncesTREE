@@ -65,6 +65,18 @@ exports.getPersonById = async (req, res) => {
 exports.getPeopleByTreeId = async (req, res) => {
   try {
     const treeId = req.params.treeId;
+    const uid = req.user ? req.user.uid : null; // Assuming auth middleware
+
+    const treeDoc = await familyTreeService.getFamilyTreeById(treeId);
+    if (!treeDoc) {
+      return res.status(404).json({ message: "Tree doesn't exist" });
+    }
+
+    // Auto-ensure user person exists only for the user's own tree
+    if (uid && treeDoc.ownerId === uid) {
+      await personService.ensureUserPersonExists(treeId, uid);
+    }
+
     const people = await personService.getPeopleByTreeId(treeId);
     if (people.length === 0) {
       return res.status(404).json({ message: "No people found in this tree." });
@@ -115,10 +127,42 @@ exports.deleteRelationshipFromPerson = async (req, res) => {
 exports.deletePerson = async (req, res) => {
   try {
     const personId = req.params.personId;
+    const uid = req.user ? req.user.uid : null; // Assuming auth middleware sets req.user.uid
+
+    if (uid && personId === uid) {
+      return res.status(400).json({ message: "Cannot delete your own person node" });
+    }
+
     await personService.deletePerson(personId);
     res.status(200).json({ message: "Person deleted successfully" });
   } catch (err) {
     console.error("Error deleting person:", err);
     res.status(500).json({ message: "Failed to delete person" });
+  }
+};
+
+exports.ensureUserPerson = async (req, res) => {
+  try {
+    const { treeId } = req.params;
+    const uid = req.user ? req.user.uid : req.body.uid; // Fallback to body if no auth
+
+    if (!uid) {
+      return res.status(400).json({ message: "User ID required" });
+    }
+
+    const treeDoc = await familyTreeService.getFamilyTreeById(treeId);
+    if (!treeDoc) {
+      return res.status(404).json({ message: "Tree doesn't exist" });
+    }
+
+    if (treeDoc.ownerId !== uid) {
+      return res.status(403).json({ message: "Cannot ensure user person on another user's tree" });
+    }
+
+    const person = await personService.ensureUserPersonExists(treeId, uid);
+    res.status(200).json({ message: "User person ensured", person });
+  } catch (err) {
+    console.error("Error ensuring user person:", err);
+    res.status(500).json({ message: "Failed to ensure user person" });
   }
 };

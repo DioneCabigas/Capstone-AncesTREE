@@ -11,6 +11,7 @@ import axios from "axios";
 import * as d3 from "d3";
 import * as f3 from "family-chart";
 import "family-chart/styles/family-chart.css";
+import { initialPersonFormData } from "@/app/utils/constants";
 
 const initialFormData = initialPersonFormData;
 
@@ -39,6 +40,7 @@ function PersonalTree() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [selectedPersonId, setSelectedPersonId] = useState(null);
+  const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
 
   // Listen for auth state changes to get current user info
   useEffect(() => {
@@ -104,22 +106,96 @@ function PersonalTree() {
     }
   };
 
+  const getBackendPersonId = (person) => {
+    return (
+      person?.personId ??
+      person?.data?.personId ??
+      person?._id ??
+      person?.id ??
+      person?.data?._id ??
+      person?.data?.id ??
+      null
+    );
+  };
+
+  const getPersonRelationships = (person) => {
+    return (
+      person?.relationships ??
+      person?.rels ??
+      person?.data?.relationships ??
+      person?.data?.rels ??
+      []
+    );
+  };
+
+  const getExistingRelationshipIds = (person, type) => {
+    return getPersonRelationships(person)
+      .filter((rel) => rel && rel.relatedPersonId && String(rel.type).toLowerCase() === type)
+      .map((rel) => rel.relatedPersonId);
+  };
+
+  const getCoParentIdsFromExistingChildren = (personId) => {
+    const person = treeData?.persons?.find((p) => getBackendPersonId(p) === personId);
+    if (!person) return [];
+
+    const childIds = getExistingRelationshipIds(person, "child");
+    const coParents = new Set();
+
+    childIds.forEach((childId) => {
+      const child = treeData?.persons?.find((p) => getBackendPersonId(p) === childId);
+      if (!child) return;
+      getExistingRelationshipIds(child, "parent").forEach((parentId) => {
+        if (parentId !== personId) {
+          coParents.add(parentId);
+        }
+      });
+    });
+
+    return Array.from(coParents);
+  };
+
+  const toF3Gender = (gender) => {
+    const value = String(gender || "").toLowerCase();
+    if (value.startsWith("m")) return "M";
+    if (value.startsWith("f")) return "F";
+    return "";
+  };
+
+  const getF3Relationships = (person) => {
+    const relationships = person.relationships || person.rels || person.data?.relationships || person.data?.rels || [];
+    const rels = { parents: [], children: [], spouses: [] };
+
+    relationships.forEach((rel) => {
+      if (!rel || !rel.relatedPersonId || !rel.type) return;
+      const type = String(rel.type).toLowerCase();
+      if (type === "parent") rels.parents.push(rel.relatedPersonId);
+      else if (type === "child") rels.children.push(rel.relatedPersonId);
+      else if (type === "spouse") rels.spouses.push(rel.relatedPersonId);
+    });
+
+    return rels;
+  };
+
   const openSidebar = async (personData) => {
-    setSelectedPersonId(personData.id);
+    const id = getBackendPersonId(personData);
+    setSelectedPersonId(id);
     setSidebarOpen(true);
 
-    const d = personData.data || {};
+    const d = personData.data || personData || {};
 
     setFormData({
       ...initialFormData,
-      firstName: d["first name"] ?? "",
-      middleName: d["middle name"] ?? "",
-      lastName: d["last name"] ?? "",
-      birthDate: d.birthday ?? "",
-      gender: d.gender === "M" ? "male" : d.gender === "F" ? "female" : "",
-      // status/dateOfDeath/placeOfDeath map here if you have them in `d`
+      firstName: d["first name"] ?? d.firstName ?? "",
+      middleName: d["middle name"] ?? d.middleName ?? "",
+      lastName: d["last name"] ?? d.lastName ?? "",
+      birthDate: d.birthDate ?? d.birthday ?? "",
+      birthPlace: d.birthPlace ?? "",
+      gender: d.gender === "M" ? "male" : d.gender === "F" ? "female" : d.gender === "male" ? "male" : d.gender === "female" ? "female" : "",
+      status: d.status ?? "living",
+      dateOfDeath: d.dateOfDeath ?? "",
+      placeOfDeath: d.placeOfDeath ?? "",
     });
-    console.log("PersonId in openSidebar:", personData.id);
+    console.log("PersonId in openSidebar:", id);
 
     if (treeData.persons.length > 0) {
       setSuggestionsLoading(true);
@@ -161,6 +237,23 @@ function PersonalTree() {
   const handleViewPerson = (personData) => {
     setPersonDetailsInModal(personData);
     setIsModalOpen(true);
+  };
+
+  const handleAddToTree = (personDetails) => {
+    setFormData({
+      relationship: "",
+      firstName: personDetails.firstName || "",
+      middleName: personDetails.middleName || "",
+      lastName: personDetails.lastName || "",
+      birthDate: personDetails.birthDate || "",
+      birthPlace: personDetails.birthPlace || "",
+      gender: personDetails.gender || "",
+      status: personDetails.status || "living",
+      dateOfDeath: personDetails.dateOfDeath || "",
+      placeOfDeath: personDetails.placeOfDeath || "",
+    });
+    setActiveTab("form");
+    setIsEditMode(false);
   };
 
   const closeModal = () => {
@@ -254,47 +347,47 @@ function PersonalTree() {
     console.log("Suggestions: ", suggestions);
   };
 
-  const handleAddPerson = async () => {
+  const handleAddPerson = async (event) => {
     event.preventDefault();
     setIsLoading(true);
+
+    const { relationship, ...personDataToSend } = formData;
+    if (personDataToSend.relationship) delete personDataToSend.relationship;
+
     if (isEditMode && selectedPersonId) {
       // EDIT
       try {
-        await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, formData);
-        console.log(`Successfully updated person ${selectedPersonId}`, formData);
+        await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, personDataToSend);
+        console.log(`Successfully updated person ${selectedPersonId}`, personDataToSend);
       } catch (error) {
         console.error("Error updating person:", error);
         alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
+        setIsLoading(false);
         return;
       }
     } else {
       console.log("PersonId:", selectedPersonId);
-      console.log("Adding person:", formData);
-
-      const { relationship, ...personDataToSend } = formData;
-      personDataToSend.relationships = [];
-
-      console.log("Sending person data:", personDataToSend);
-      console.log("Relationship to establish:", relationship);
-      console.log("Targeting treeId:", treeId);
+      console.log("Adding person:", personDataToSend);
 
       try {
         const createPersonResponse = await axios.post(`${BACKEND_BASE_URL}/api/persons/${treeId}`, {
           ...personDataToSend,
+          relationships: [],
         });
         const newPerson = createPersonResponse.data;
+        const newPersonId = getBackendPersonId(newPerson);
         console.log(`Successfully added person to tree ${treeId}: `, newPerson);
 
-        if (newPerson && selectedPersonId && relationship) {
+        if (newPersonId && selectedPersonId && relationship) {
           let sourceRelationshipType;
           let targetRelationshipType;
 
           if (relationship === "parent") {
-            sourceRelationshipType = "child";
-            targetRelationshipType = "parent";
-          } else if (relationship === "child") {
             sourceRelationshipType = "parent";
             targetRelationshipType = "child";
+          } else if (relationship === "child") {
+            sourceRelationshipType = "child";
+            targetRelationshipType = "parent";
           } else if (relationship === "spouse") {
             sourceRelationshipType = "spouse";
             targetRelationshipType = "spouse";
@@ -303,14 +396,23 @@ function PersonalTree() {
             return;
           }
 
+          const selectedPerson = treeData?.persons?.find((person) => getBackendPersonId(person) === selectedPersonId);
+          const selectedExistingRelationships = getPersonRelationships(selectedPerson);
+          const selectedSpouseIds = getExistingRelationshipIds(selectedPerson, "spouse");
+          const inferredCoParentIds = getCoParentIdsFromExistingChildren(selectedPersonId);
+          const coParentIds = Array.from(new Set([...selectedSpouseIds, ...inferredCoParentIds]));
+
+          const updatedSelectedRelationships = [
+            ...selectedExistingRelationships,
+            {
+              relatedPersonId: newPersonId,
+              type: sourceRelationshipType,
+            },
+          ];
+
           try {
             await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, {
-              relationships: [
-                {
-                  relatedPersonId: newPerson.personId,
-                  type: sourceRelationshipType,
-                },
-              ],
+              relationships: updatedSelectedRelationships,
             });
             console.log(`Successfully updated relationship for person ${selectedPersonId}:`);
           } catch (error) {
@@ -318,26 +420,59 @@ function PersonalTree() {
             return;
           }
 
-          try {
-            await axios.put(`${BACKEND_BASE_URL}/api/persons/${newPerson.personId}`, {
-              relationships: [
-                {
-                  relatedPersonId: selectedPersonId,
-                  type: targetRelationshipType,
-                },
-              ],
+          const newPersonExistingRelationships = getPersonRelationships(newPerson);
+          const updatedNewPersonRelationships = [
+            ...newPersonExistingRelationships,
+            {
+              relatedPersonId: selectedPersonId,
+              type: targetRelationshipType,
+            },
+          ];
+
+          if (relationship === "child" && coParentIds.length > 0) {
+            coParentIds.forEach((parentId) => {
+              if (parentId !== selectedPersonId) {
+                updatedNewPersonRelationships.push({ relatedPersonId: parentId, type: "parent" });
+              }
             });
-            console.log(`Successfully updated relationship for new person ${newPerson.personId}`);
-          } catch (error) {
-            console.warn(`Error adding reciprocal relationship to new person ${newPerson.personId}: `, error.response?.data || error.message);
           }
-        } else {
-          console.warn("Cannot establish relationship: new person, selected person, or relationship type is missing.");
+
+          try {
+            await axios.put(`${BACKEND_BASE_URL}/api/persons/${newPersonId}`, {
+              relationships: updatedNewPersonRelationships,
+            });
+            console.log(`Successfully updated relationship for new person ${newPersonId}`);
+          } catch (error) {
+            console.warn(`Error adding reciprocal relationship to new person ${newPersonId}: `, error.response?.data || error.message);
+          }
+
+          if (relationship === "child" && coParentIds.length > 0) {
+            for (const parentId of coParentIds) {
+              if (parentId === selectedPersonId) continue;
+              const parentPerson = treeData?.persons?.find((person) => getBackendPersonId(person) === parentId);
+              const parentRelationships = getPersonRelationships(parentPerson);
+              const hasChildRelation = parentRelationships.some(
+                (rel) => rel.relatedPersonId === newPersonId && String(rel.type).toLowerCase() === "child"
+              );
+              if (!hasChildRelation) {
+                parentRelationships.push({ relatedPersonId: newPersonId, type: "child" });
+              }
+
+              try {
+                await axios.put(`${BACKEND_BASE_URL}/api/persons/${parentId}`, {
+                  relationships: parentRelationships,
+                });
+                console.log(`Successfully updated co-parent ${parentId} with new child ${newPersonId}`);
+              } catch (error) {
+                console.warn(`Error updating co-parent ${parentId} with new child ${newPersonId}:`, error.response?.data || error.message);
+              }
+            }
+          }
+        } else if (newPersonId && selectedPersonId) {
+          console.warn("Relationship type not specified; created person without connecting relationship.");
         }
       } catch (error) {
         console.warn("Error adding person to tree: ", error);
-      } finally {
-        setIsLoading(false);
       }
     }
 
@@ -346,10 +481,82 @@ function PersonalTree() {
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
+
     if (!isCurrentUsersTree) {
-      await fetchTreeData(externalUid, currentUser, isCurrentUsersTree);
+      await fetchTreeData(externalUid, isCurrentUsersTree);
     } else {
-      await fetchTreeData(currentUserId, currentUser, isCurrentUsersTree);
+      await fetchTreeData(currentUserId, isCurrentUsersTree);
+    }
+
+    setIsLoading(false);
+  };
+
+  const handleDeletePerson = async (personIdToDelete) => {
+    if (!personIdToDelete) {
+      console.warn("No person ID provided for delete.");
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this person? This action cannot be undone."
+    );
+    if (!confirmDelete) return;
+
+    setIsLoading(true);
+
+    try {
+      await axios.delete(`${BACKEND_BASE_URL}/api/persons/${personIdToDelete}`);
+      console.log(`Successfully deleted person with ID: ${personIdToDelete}`);
+      setSidebarOpen(false);
+      setIsEditMode(false);
+      setSelectedPersonId(null);
+      setFormData({ ...initialFormData });
+      setPersonsData((prev) => prev.filter((person) => getBackendPersonId(person) !== personIdToDelete));
+      setTreeData((prev) =>
+        prev
+          ? {
+              ...prev,
+              persons: prev.persons?.filter((person) => getBackendPersonId(person) !== personIdToDelete) ?? [],
+            }
+          : prev
+      );
+      if (chartInstanceRef.current && chartRef.current) {
+        d3.select(chartRef.current).selectAll("*").remove();
+        chartInstanceRef.current = null;
+      }
+
+      // Clean up any remaining relationships that still reference the deleted person.
+      const remainingPeople = treeData?.persons?.filter((person) => getBackendPersonId(person) !== personIdToDelete) || [];
+      for (const person of remainingPeople) {
+        const currentRelationships = person.relationships || person.rels || [];
+        const filteredRelationships = currentRelationships.filter(
+          (rel) => rel && rel.relatedPersonId !== personIdToDelete
+        );
+        if (filteredRelationships.length !== currentRelationships.length) {
+          try {
+            await axios.put(`${BACKEND_BASE_URL}/api/persons/${getBackendPersonId(person)}`, {
+              relationships: filteredRelationships,
+            });
+            console.log(`Removed deleted person ${personIdToDelete} from relationships of ${getBackendPersonId(person)}`);
+          } catch (error) {
+            console.warn(
+              `Error cleaning relationships for person ${getBackendPersonId(person)} after delete:`,
+              error.response?.data || error.message
+            );
+          }
+        }
+      }
+
+      if (!isCurrentUsersTree) {
+        await fetchTreeData(externalUid, isCurrentUsersTree);
+      } else {
+        await fetchTreeData(currentUserId, isCurrentUsersTree);
+      }
+    } catch (error) {
+      console.error("Error deleting person:", error.response?.data || error.message);
+      alert(`Failed to delete person: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -383,10 +590,11 @@ function PersonalTree() {
       // fetch persons for the tree
       if (treeIdToUse) {
         console.log("Fetching persons for tree ID:", treeIdToUse);
-        // const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
-        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/test/family-trees/${treeIdToUse}/chart`);
+        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
+        // const personsResponse = await axios.get(`${BACKEND_BASE_URL}/test/family-trees/${treeIdToUse}/chart`);
         const fetchedPersons = personsResponse.data;
         console.log("Fetched persons data:", fetchedPersons);
+        setPersonsData(fetchedPersons);
         setTreeData({ ...fetchedTreeData, persons: fetchedPersons });
       }
     } catch (error) {
@@ -425,8 +633,11 @@ function PersonalTree() {
       return;
     }
 
-    // // Prevent creating the chart more than once
-    if (chartInstanceRef.current) return;
+    // Recreate the chart whenever treeData changes so updates are always reflected.
+    if (chartInstanceRef.current) {
+      d3.select(chartRef.current).selectAll("*").remove();
+      chartInstanceRef.current = null;
+    }
 
     try {
       console.log("Creating family chart...");
@@ -451,20 +662,33 @@ function PersonalTree() {
 
       // Map treeData to f3 chart format
       const data = treeData?.persons
-        ? treeData.persons.map((person) => ({
-            id: person.id,
-            data: {
-              "first name": person.data.firstName,
-              "last name": person.data.lastName,
-              birthday: person.data.birthDate,
-              gender: person.data.gender === "Male" ? "M" : "F",
-            },
-            rels: {
-              spouses: person.rels?.spouses || [],
-              children: person.rels?.children || [],
-              parents: person.rels?.parents || [],
-            },
-          }))
+        ? treeData.persons
+            .map((person) => {
+              const source = person.data || person;
+              const firstName = source.firstName ?? source["first name"] ?? "";
+              const lastName = source.lastName ?? source["last name"] ?? "";
+              const birthday = source.birthDate ?? source.birthday ?? "";
+              const gender = toF3Gender(source.gender);
+              const id = getBackendPersonId(person);
+
+              if (!id) {
+                console.warn("Skipping person record with missing id:", person);
+                return null;
+              }
+
+              return {
+                id,
+                data: {
+                  personId: id,
+                  "first name": firstName,
+                  "last name": lastName,
+                  birthday,
+                  gender,
+                },
+                rels: getF3Relationships(person),
+              };
+            })
+            .filter(Boolean)
         : [];
 
       console.log("Mapped chart data:", data);
@@ -509,9 +733,30 @@ function PersonalTree() {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(true);
-              openSidebar(d.data);
+              openSidebar(d);
               console.log("Editing person:", d);
             });
+
+          // DELETE PERSON CARD BUTTON
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 20px; height: 20px; position: absolute; top: 0; right: 46px; background: #e11d48; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;"
+            )
+            .html("×")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "#be123c");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "#e11d48");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              const personId = getBackendPersonId(d);
+              handleDeletePerson(personId);
+            });
+
           // ADD PERSON CARD BUTTON
           d3.select(card)
             .append("div")
@@ -530,7 +775,7 @@ function PersonalTree() {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(false);
-              openSidebar(d.data);
+              openSidebar(d);
             });
         });
 
@@ -609,8 +854,7 @@ function PersonalTree() {
 
           {/* Form Content */}
           {activeTab === "form" && (
-            <form>
-              {/* onSubmit={handleAddPerson} */}
+            <form onSubmit={handleAddPerson}>
               <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
                 {/* Relationship */}
                 {!isEditMode && (
@@ -828,7 +1072,7 @@ function PersonalTree() {
                   </div>
                 </div>
 
-                {formData.status === "Deceased" && (
+                {formData.status === "deceased" && (
                   <div>
                     {/* Date of Death */}
                     <div className="pb-3">
@@ -868,6 +1112,19 @@ function PersonalTree() {
                     <span>{isEditMode ? "Save Changes" : "Add person"}</span>
                   </button>
                 </div>
+                {isEditMode && selectedPersonId && (
+                  <div className="pt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePerson(selectedPersonId)}
+                      className="w-full text-white py-2.5 px-4 rounded-md hover:bg-red-500 transition-colors text-sm font-medium"
+                      style={{ backgroundColor: "#dc2626" }}
+                    >
+                      <X className="w-4 h-4 mr-2 inline-block" />
+                      Delete person
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
           )}
