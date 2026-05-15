@@ -20,6 +20,14 @@ exports.getMembersByGroup = async (groupId) => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
+exports.getMemberByGroupAndUser = async (groupId, userId) => {
+  const snapshot = await collection
+    .where('groupId', '==', groupId)
+    .where('userId', '==', userId)
+    .get();
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
 exports.updateMemberStatus = async (memberId, status) => {
   await collection.doc(memberId).update({ status });
 };

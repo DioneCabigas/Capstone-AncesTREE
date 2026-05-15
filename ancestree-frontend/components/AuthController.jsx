@@ -32,26 +32,20 @@ export default function AuthController({ children, mode = "PROTECT" }) {
     // Subscribe to authentication state changes
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
-      
-      // Handle redirection based on mode and auth state
+
       if (mode === "PROTECT") {
-        // For protected routes: redirect to login if not authenticated or email not verified
         if (!authUser || !authUser.emailVerified) {
           router.push("/auth/login");
-        } else {
-          setIsLoading(false);
         }
+        setIsLoading(false);
       } else if (mode === "REDIRECT") {
-        // For auth pages (login/signup): redirect to home if authenticated
         if (authUser && authUser.emailVerified) {
-          // router.push("/auth/home"); // This is here but naa sad sa login?
-          router.push("/");
-        } else {
-          setIsLoading(false);
+          router.push("/dashboard");
         }
+        setIsLoading(false);
       }
     });
-    
+
     // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [router, mode]);

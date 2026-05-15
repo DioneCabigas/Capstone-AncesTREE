@@ -74,7 +74,7 @@ const LoadingScreen = ({
 
   if (variant === 'minimal') {
     return (
-      <div className="fixed inset-0 bg-white bg-opacity-95 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div suppressHydrationWarning className="fixed inset-0 bg-white bg-opacity-95 backdrop-blur-sm z-50 flex items-center justify-center">
         <div className="flex flex-col items-center">
           <div className="relative">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-transparent border-t-[#4F6F52] border-r-[#4F6F52]"></div>
@@ -90,7 +90,7 @@ const LoadingScreen = ({
 
   if (variant === 'branded') {
     return (
-      <div className="fixed inset-0 bg-gradient-to-br from-[#4F6F52] to-[#313131] z-50 flex items-center justify-center">
+      <div suppressHydrationWarning className="fixed inset-0 bg-gradient-to-br from-[#4F6F52] to-[#313131] z-50 flex items-center justify-center">
         <div className="text-center text-white">
           <div className="relative mb-8">
             <Image 
@@ -117,7 +117,7 @@ const LoadingScreen = ({
 
   // Default variant
   return (
-    <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+    <div suppressHydrationWarning className="fixed inset-0 bg-white z-50 flex items-center justify-center">
       <div className="text-center max-w-md mx-auto px-6">
         {/* Logo */}
         <div className="mb-8">

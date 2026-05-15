@@ -61,7 +61,7 @@ function LoginContent() {
             email: user.email,
           });
         }
-        router.push("/home");
+        router.push("/dashboard");
       } else {
         setError("Please verify your email before logging in.");
       }
@@ -86,7 +86,7 @@ function LoginContent() {
     <div className="flex min-h-screen">
       {/* Left side - Login form */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-white px-4 md:px-8">
-        <Link href={user ? "/home" : "/"} className="flex items-center">
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center">
           {/* Logo with dark accent background and white text */}
           <Image src="/images/AncesTree_Logo.png" alt="Logo" width={135} height={40}/>
         </Link>

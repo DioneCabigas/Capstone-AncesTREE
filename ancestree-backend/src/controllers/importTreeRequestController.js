@@ -1,12 +1,13 @@
 const importTreeRequestService = require('../services/importTreeRequestService');
 const userService = require('../services/userService');
 const familyTreeService = require('../services/familyTreeService');
+const familyGroupService = require('../services/familyGroupService');
 const familyGroupMemberService = require('../services/familyGroupMemberService');
 
 // Helper function to check if user is Host of the group
-const isUserHostOfGroup = async (userId, groupTreeId) => {
+const isUserHostOfGroup = async (userId, groupId) => {
   try {
-    const members = await familyGroupMemberService.getMembersByGroup(groupTreeId);
+    const members = await familyGroupMemberService.getMembersByGroup(groupId);
     const userMember = members.find(member => member.userId === userId);
     return userMember && userMember.role === 'Host';
   } catch (error) {
@@ -33,11 +34,25 @@ exports.createImportRequest = async (req, res) => {
       return res.status(404).json({ message: 'Group tree not found.' });
     }
 
+    // Resolve the owning group for this group tree
+    const group = await familyGroupService.getGroupByTreeId(treeId);
+    if (!group) {
+      return res.status(404).json({ message: 'Family group not found for this tree.' });
+    }
+
     // Verify the personal tree exists
     const personalTree = await familyTreeService.getFamilyTreeById(personalTreeId);
     if (!personalTree) {
       return res.status(404).json({ message: 'Personal tree not found.' });
     }
+
+    // Verify requestor is a member of this group
+    const requestorMemberRecords = await familyGroupMemberService.getMemberByGroupAndUser(group.id, requestorId);
+    if (!requestorMemberRecords || requestorMemberRecords.length === 0) {
+      return res.status(403).json({ message: 'Only group members can create import requests for this tree.' });
+    }
+
+    const isHost = await isUserHostOfGroup(requestorId, group.id);
 
     // Get requestor details
     const requestorDetails = await userService.getUser(requestorId);
@@ -46,14 +61,30 @@ exports.createImportRequest = async (req, res) => {
     // Generate preview of the personal tree
     const preview = await importTreeRequestService.generateImportPreview(personalTreeId);
 
-    // Create the import request
-    const importRequest = await importTreeRequestService.createImportRequest(
-      treeId,
-      personalTreeId,
-      requestorId,
-      requestorName,
-      preview
-    );
+    let importRequest;
+    if (isHost) {
+      // Host-created request is approved immediately and merged straight away
+      await importTreeRequestService.importPersonalTreeIntoGroupTree(personalTreeId, treeId);
+
+      importRequest = await importTreeRequestService.createImportRequest(
+        treeId,
+        personalTreeId,
+        requestorId,
+        requestorName,
+        preview,
+        'approved',
+        requestorId,
+        new Date()
+      );
+    } else {
+      importRequest = await importTreeRequestService.createImportRequest(
+        treeId,
+        personalTreeId,
+        requestorId,
+        requestorName,
+        preview
+      );
+    }
 
     res.status(201).json({
       message: 'Import request created successfully.',
@@ -125,8 +156,13 @@ exports.approveImportRequest = async (req, res) => {
       return res.status(404).json({ message: 'Import request not found.' });
     }
 
+    const group = await familyGroupService.getGroupByTreeId(importRequest.groupTreeId);
+    if (!group) {
+      return res.status(404).json({ message: 'Family group not found for this import request.' });
+    }
+
     // Check if the reviewer is a Host of the group
-    const isHost = await isUserHostOfGroup(reviewedBy, importRequest.groupTreeId);
+    const isHost = await isUserHostOfGroup(reviewedBy, group.id);
     if (!isHost) {
       return res.status(403).json({ message: 'Only group hosts can approve import requests.' });
     }
@@ -161,8 +197,13 @@ exports.rejectImportRequest = async (req, res) => {
       return res.status(404).json({ message: 'Import request not found.' });
     }
 
+    const group = await familyGroupService.getGroupByTreeId(importRequest.groupTreeId);
+    if (!group) {
+      return res.status(404).json({ message: 'Family group not found for this import request.' });
+    }
+
     // Check if the reviewer is a Host of the group
-    const isHost = await isUserHostOfGroup(reviewedBy, importRequest.groupTreeId);
+    const isHost = await isUserHostOfGroup(reviewedBy, group.id);
     if (!isHost) {
       return res.status(403).json({ message: 'Only group hosts can reject import requests.' });
     }

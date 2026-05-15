@@ -8,11 +8,11 @@ router.post("/:treeId/create", importTreeRequestController.createImportRequest);
 // Get all pending import requests for a group tree
 router.get("/:treeId/pending", importTreeRequestController.getPendingImportRequests);
 
-// Get all import requests for a group tree
-router.get("/:treeId", importTreeRequestController.getImportRequestsByGroupTree);
-
 // Get import requests for the current user
 router.get("/user/requests", importTreeRequestController.getImportRequestsForUser);
+
+// Get all import requests for a group tree
+router.get("/:treeId", importTreeRequestController.getImportRequestsByGroupTree);
 
 // Approve an import request
 router.put("/:requestId/approve", importTreeRequestController.approveImportRequest);

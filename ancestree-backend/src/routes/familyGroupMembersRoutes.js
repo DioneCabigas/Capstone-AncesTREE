@@ -4,6 +4,7 @@ const familyGroupMemberController = require('../controllers/familyGroupMemberCon
 
 router.post('/', familyGroupMemberController.addMember);
 router.get('/group/:groupId', familyGroupMemberController.getMembersByGroup);
+router.get('/tree/:treeId/user/:userId', familyGroupMemberController.getMemberByTreeAndUser);
 router.patch('/:id/status', familyGroupMemberController.updateMemberStatus);
 router.delete('/:id', familyGroupMemberController.removeMember);
 

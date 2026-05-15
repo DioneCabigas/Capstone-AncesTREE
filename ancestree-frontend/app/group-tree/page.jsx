@@ -34,6 +34,7 @@ function ViewGroupPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [connections, setConnections] = useState([]);
 
   const [isChartReady, setIsChartReady] = useState(false);
@@ -49,6 +50,8 @@ function ViewGroupPage() {
   const [importPreviewSummary, setImportPreviewSummary] = useState(null);
   const [isImportRequestLoading, setIsImportRequestLoading] = useState(false);
   const [userRole, setUserRole] = useState(null);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
+  const [toast, setToast] = useState({ message: "", type: "success", visible: false });
 
   const getBackendPersonId = (person) => {
     return (
@@ -76,6 +79,11 @@ function ViewGroupPage() {
     return getPersonRelationships(person)
       .filter((rel) => rel && rel.relatedPersonId && String(rel.type).toLowerCase() === type)
       .map((rel) => rel.relatedPersonId);
+  };
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type, visible: true });
+    window.setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 4000);
   };
 
   const getCoParentIdsFromExistingChildren = (personId) => {
@@ -157,6 +165,8 @@ function ViewGroupPage() {
       } else {
         setCurrentUser(null);
         setCurrentUserId(null);
+        setUserRole(null);
+        setIsRoleLoading(false);
         setPeople([]);
       }
     });
@@ -167,15 +177,37 @@ function ViewGroupPage() {
     if (currentUserId) {
       fetchConnectionsData(currentUserId);
       fetchPersonalTrees(currentUserId);
-      checkUserRole(currentUserId, treeId);
     }
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (currentUserId && treeId) {
+      checkUserRole(currentUserId, treeId);
+    }
+  }, [currentUserId, treeId]);
 
   useEffect(() => {
     if (treeId) {
       fetchTreeData(treeId);
       if (userRole === "Host") fetchImportRequests(treeId);
     }
+  }, [treeId, userRole]);
+
+  // Poll pending import requests when the current user is the Host
+  useEffect(() => {
+    if (!treeId || userRole !== "Host") return;
+    let interval = null;
+    const startPolling = () => {
+      // initial fetch
+      fetchImportRequests(treeId);
+      interval = setInterval(() => {
+        fetchImportRequests(treeId);
+      }, 30000); // poll every 30 seconds
+    };
+    startPolling();
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [treeId, userRole]);
 
   const fetchUserDetails = async (uid) => {
@@ -244,23 +276,46 @@ function ViewGroupPage() {
   };
 
   const checkUserRole = async (userId, treeId) => {
+    if (!userId || !treeId) {
+      setUserRole(null);
+      setIsRoleLoading(false);
+      return;
+    }
+
+    setIsRoleLoading(true);
     try {
-      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/group/${treeId}`);
-      const members = Array.isArray(response.data) ? response.data : response.data?.data || [];
-      const member = members.find((item) => item.userId === userId);
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/tree/${treeId}/user/${userId}`);
+      const member = response.data?.data ?? response.data;
       const role = member?.role || null;
       setUserRole(role);
     } catch (error) {
       console.error("Error checking user role:", error);
       setUserRole(null);
+    } finally {
+      setIsRoleLoading(false);
     }
   };
 
   const fetchImportRequests = async (treeId) => {
     try {
       const response = await axios.get(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/pending`);
-      const data = Array.isArray(response.data) ? response.data : (response.data?.requests || response.data?.data || []);
-      setImportRequests(data);
+      const respData = response.data;
+
+      let data = [];
+      if (Array.isArray(respData)) data = respData;
+      else if (respData && typeof respData === "object") {
+        // common wrappers
+        if (Array.isArray(respData.requests)) data = respData.requests;
+        else if (Array.isArray(respData.data)) data = respData.data;
+        else if (Array.isArray(respData.items)) data = respData.items;
+        else {
+          // try to find the first array property on the object
+          const arrProp = Object.keys(respData).find((k) => Array.isArray(respData[k]));
+          if (arrProp) data = respData[arrProp];
+        }
+      }
+
+      setImportRequests(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error fetching import requests:", error);
       setImportRequests([]);
@@ -268,6 +323,17 @@ function ViewGroupPage() {
   };
 
   const normalizeName = (value) => String(value || "").trim().toLowerCase();
+
+  const getPersonalTreeLabel = (tree) => {
+    const userName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ");
+    if (userName) {
+      return `${userName} Tree`;
+    }
+    if (tree?.name) {
+      return tree.name;
+    }
+    return "Personal Tree";
+  };
 
   const buildImportPreview = (importPeople) => {
     if (!importPeople || !Array.isArray(importPeople)) {
@@ -333,7 +399,11 @@ function ViewGroupPage() {
 
   const handleSubmitImportRequest = async () => {
     if (!selectedPersonalTreeId || !treeId) {
-      alert("Please select a personal tree to import.");
+      showToast("Please select a personal tree to import.", "error");
+      return;
+    }
+    if (!currentUserId || !currentUser) {
+      showToast("Unable to submit import request: user information is missing.", "error");
       return;
     }
 
@@ -341,14 +411,16 @@ function ViewGroupPage() {
     try {
       await axios.post(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/create`, {
         personalTreeId: selectedPersonalTreeId,
+        requestorId: currentUserId,
+        requestorName: `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim(),
       });
-      alert("Import request submitted. The host will review it.");
+      showToast("Import request submitted. The host will review it.", "success");
       if (userRole === "Host") {
         await fetchImportRequests(treeId);
       }
     } catch (error) {
       console.error("Error submitting import request:", error);
-      alert("Failed to submit import request. Please try again.");
+      showToast("Failed to submit import request. Please try again.", "error");
     } finally {
       setIsImportRequestLoading(false);
     }
@@ -358,15 +430,17 @@ function ViewGroupPage() {
     if (!requestId) return;
     setIsImportRequestLoading(true);
     try {
-      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/approve`);
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/approve`, {
+        reviewedBy: currentUserId,
+      });
       if (treeId) {
         await fetchImportRequests(treeId);
         await fetchTreeData(treeId);
       }
-      alert("Import request approved and merged into the group tree.");
+      showToast("Import request approved and merged into the group tree.", "success");
     } catch (error) {
       console.error("Error approving import request:", error);
-      alert("Failed to approve import request. Please try again.");
+      showToast("Failed to approve import request. Please try again.", "error");
     } finally {
       setIsImportRequestLoading(false);
     }
@@ -376,14 +450,16 @@ function ViewGroupPage() {
     if (!requestId) return;
     setIsImportRequestLoading(true);
     try {
-      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/reject`);
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/reject`, {
+        reviewedBy: currentUserId,
+      });
       if (treeId) {
         await fetchImportRequests(treeId);
       }
-      alert("Import request rejected.");
+      showToast("Import request rejected.", "success");
     } catch (error) {
       console.error("Error rejecting import request:", error);
-      alert("Failed to reject import request. Please try again.");
+      showToast("Failed to reject import request. Please try again.", "error");
     } finally {
       setIsImportRequestLoading(false);
     }
@@ -391,25 +467,33 @@ function ViewGroupPage() {
 
   const handleMergeSelectedTreeNow = async () => {
     if (!selectedPersonalTreeId || !treeId) {
-      alert("Please select a personal tree to merge.");
+      showToast("Please select a personal tree to merge.", "error");
       return;
     }
     if (!importPreview) {
-      alert("Please load tree preview before merging.");
+      showToast("Please load tree preview before merging.", "error");
       return;
     }
 
     setIsImportRequestLoading(true);
     try {
-      await axios.post(`${BACKEND_BASE_URL}/api/group-trees/${treeId}/import`, {
+      await axios.post(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/create`, {
         personalTreeId: selectedPersonalTreeId,
+        requestorId: currentUserId,
         preview: importPreview,
       });
-      await fetchTreeData(treeId);
-      alert("Selected personal tree has been merged into the group tree.");
+
+      if (treeId) {
+        await fetchTreeData(treeId);
+        if (userRole === "Host") {
+          await fetchImportRequests(treeId);
+        }
+      }
+
+      showToast("Selected personal tree import request has been submitted.", "success");
     } catch (error) {
       console.error("Error merging selected tree:", error);
-      alert("Failed to merge tree. Please try again.");
+      showToast("Failed to merge tree. Please try again.", "error");
     } finally {
       setIsImportRequestLoading(false);
     }
@@ -804,7 +888,16 @@ function ViewGroupPage() {
         <div className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
           <div className="border-b border-gray-200">
             <div className="flex justify-between items-center px-4 py-2">
-              <span className="text-sm font-medium text-gray-700">Role: {userRole || "Loading..."}</span>
+              <span className="text-sm font-medium text-gray-700">
+                Role: {isRoleLoading ? "Loading..." : userRole || "Unknown"}
+              </span>
+              <button
+                onClick={() => checkUserRole(currentUserId, treeId)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+                title="Refresh role"
+              >
+                Refresh role
+              </button>
             </div>
             <div className="flex justify-around">
               {['Add member', 'Connections', 'Import Tree'].map((tab) => (
@@ -1063,7 +1156,7 @@ function ViewGroupPage() {
                     >
                       <div className="flex items-center justify-between gap-x-3">
                         <div>
-                          <h4 className="font-medium text-gray-900">{tree.name || `Tree ${tree.treeId || tree.id}`}</h4>
+                          <h4 className="font-medium text-gray-900">{getPersonalTreeLabel(tree)}</h4>
                           <p className="text-xs text-gray-500">{tree.description || `${tree.members?.length || 0} people`}</p>
                         </div>
                         {selectedPersonalTreeId === (tree.treeId || tree.id) && <span className="text-xs text-emerald-700">Selected</span>}
@@ -1114,62 +1207,63 @@ function ViewGroupPage() {
               )}
 
               <div className="pt-3 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={handleSubmitImportRequest}
-                  disabled={isImportRequestLoading || !selectedPersonalTreeId}
-                  className="w-full text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                  style={{ backgroundColor: "#365643" }}
-                >
-                  {isImportRequestLoading ? "Submitting request..." : "Submit Import Request"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMergeSelectedTreeNow}
-                  disabled={isImportRequestLoading || !selectedPersonalTreeId}
-                  className="w-full text-[#365643] border border-emerald-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                >
-                  {isImportRequestLoading ? "Merging..." : "Merge Now"}
-                </button>
+                {userRole !== "Host" && (
+                  <button
+                    type="button"
+                    onClick={handleSubmitImportRequest}
+                    disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                    className="w-full text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#365643" }}
+                  >
+                    {isImportRequestLoading ? "Submitting request..." : "Submit Import Request"}
+                  </button>
+                )}
+
+                {userRole === "Host" && (
+                  <button
+                    type="button"
+                    onClick={handleMergeSelectedTreeNow}
+                    disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                    className="w-full text-[#365643] border border-emerald-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                  >
+                    {isImportRequestLoading ? "Merging..." : "Merge Now"}
+                  </button>
+                )}
+
+                {userRole !== "Host" && (
+                  <p className="text-xs text-gray-500 pt-1">Only the group Host can perform an immediate merge.</p>
+                )}
               </div>
 
-              {userRole === "Host" && importRequests.length > 0 && (
+              {userRole === "Host" && (
                 <div className="rounded-lg border border-gray-200 bg-white p-4 mt-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-gray-900">Pending import requests</h4>
-                    <span className="text-xs text-gray-500">Host controls</span>
-                  </div>
-                  <div className="space-y-3">
-                    {importRequests.map((request) => (
-                      <div key={request.id || request.requestId} className="rounded-lg border border-gray-200 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{request.requestorName || "Unknown requester"}</p>
-                            <p className="text-xs text-gray-500">Requested import for tree {request.personalTreeId || request.treeId}</p>
-                            <p className="text-xs text-gray-500">Created: {new Date(request.createdAt || request.created || Date.now()).toLocaleString()}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleApproveImportRequest(request.requestId || request.id)}
-                              className="text-white px-3 py-1.5 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-800"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRejectImportRequest(request.requestId || request.id)}
-                              className="text-white px-3 py-1.5 rounded text-xs font-medium bg-red-600 hover:bg-red-700"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {request.preview ? `Preview matched ${request.preview.matchedCount} of ${request.preview.importPersonCount} people.` : "No preview available."}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">Pending import requests</h4>
+                      <p className="text-xs text-gray-500">
+                        {importRequests.length} pending request{importRequests.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fetchImportRequests(treeId)}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                        title="Refresh pending requests"
+                      >
+                        Refresh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fetchImportRequests(treeId);
+                          setIsRequestsModalOpen(true);
+                        }}
+                        className="text-xs text-[#365643] border border-[#365643] px-3 py-1 rounded hover:bg-emerald-50"
+                      >
+                        View Requests
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1177,6 +1271,84 @@ function ViewGroupPage() {
           )}
         </div>
       </div>
+
+      {isRequestsModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setIsRequestsModalOpen(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Pending Import Requests</h2>
+                <p className="text-xs text-gray-500">Review and approve or reject requests from group members.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRequestsModalOpen(false)}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4 max-h-[70vh]">
+              {importRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-gray-500">No pending import requests.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {importRequests.map((request) => (
+                    <div key={request.id || request.requestId} className="rounded-lg border border-gray-200 p-4">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{request.requestorName || "Unknown requester"}</p>
+                          <p className="text-xs text-gray-500">Requested import for tree {request.personalTreeId || request.treeId}</p>
+                          <p className="text-xs text-gray-500">Created: {new Date(request.createdAt || request.created || Date.now()).toLocaleString()}</p>
+                          <p className="text-xs text-gray-600 mt-2">{request.preview ? `Preview matched ${request.preview.matchedCount} of ${request.preview.importPersonCount} people.` : "No preview available."}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveImportRequest(request.requestId || request.id)}
+                            className="bg-[#365643] text-white px-4 py-2 rounded-md text-sm hover:bg-[#4f6f52] disabled:opacity-50"
+                            disabled={isImportRequestLoading}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectImportRequest(request.requestId || request.id)}
+                            className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
+                            disabled={isImportRequestLoading}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+            <div className="flex items-center justify-end border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => fetchImportRequests(treeId)}
+                className="text-xs text-[#365643] border border-[#365643] px-3 py-1 rounded hover:bg-emerald-50"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast.visible && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 px-4">
+          <div className={`rounded-xl px-4 py-3 shadow-lg text-sm font-medium text-white ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
+            {toast.message}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
