@@ -19,8 +19,8 @@ const importTreeRequestRoutes = require("./routes/importTreeRequestRoutes");
 const app = express();
 const port = process.env.PORT || 3001;
 
-// app.use(cors({ origin: "https://ancestree2025.netlify.app", credentials: true }));
-app.use(cors({ origin: "http://localhost:3000", credentials: true }));
+app.use(cors({ origin: "https://ancestree2025.netlify.app", credentials: true }));
+// app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(bodyParser.json());
 // app.use(express.json()); // Ignore this
 
