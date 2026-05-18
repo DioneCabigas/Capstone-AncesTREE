@@ -20,6 +20,7 @@ function ViewGroupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const treeId = searchParams.get("treeId");
+  const groupId = searchParams.get("groupId");
   const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +36,8 @@ function ViewGroupPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
-  const [connections, setConnections] = useState([]);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [isGroupMembersLoading, setIsGroupMembersLoading] = useState(false);
 
   const [isChartReady, setIsChartReady] = useState(false);
   const chartRef = useRef(null);
@@ -113,6 +115,20 @@ function ViewGroupPage() {
     return "";
   };
 
+  const normalizeGender = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "m" || normalized === "male") return "male";
+    if (normalized === "f" || normalized === "female") return "female";
+    return "";
+  };
+
+  const normalizeStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "deceased" || normalized === "dead") return "deceased";
+    if (normalized === "living" || normalized === "alive") return "living";
+    return "living";
+  };
+
   const getF3Relationships = (person) => {
     const relationships = getPersonRelationships(person);
     const rels = { parents: [], children: [], spouses: [] };
@@ -175,7 +191,6 @@ function ViewGroupPage() {
 
   useEffect(() => {
     if (currentUserId) {
-      fetchConnectionsData(currentUserId);
       fetchPersonalTrees(currentUserId);
     }
   }, [currentUserId]);
@@ -189,9 +204,10 @@ function ViewGroupPage() {
   useEffect(() => {
     if (treeId) {
       fetchTreeData(treeId);
+      fetchGroupMembers(treeId, groupId);
       if (userRole === "Host") fetchImportRequests(treeId);
     }
-  }, [treeId, userRole]);
+  }, [treeId, groupId, userRole]);
 
   // Poll pending import requests when the current user is the Host
   useEffect(() => {
@@ -220,34 +236,86 @@ function ViewGroupPage() {
     }
   };
 
-  const fetchConnectionsData = async (userId) => {
+  const normalizeApiArray = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== "object") return [];
+
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.members)) return payload.members;
+
+    const nestedArray = Object.values(payload).find((value) => Array.isArray(value));
+    if (nestedArray) return nestedArray;
+
+    if (payload.data && typeof payload.data === "object") return normalizeApiArray(payload.data);
+    if (payload.member && typeof payload.member === "object") return [payload.member];
+    if (payload.userId || payload.id || payload.role) return [payload];
+
+    return [];
+  };
+
+  const fetchGroupMembers = async (treeIdToFetch, groupIdToFetch) => {
+    if (!treeIdToFetch && !groupIdToFetch) return;
+
+    setIsGroupMembersLoading(true);
     try {
-      const connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/connections/${userId}`);
-      if (connectionsResponse.status === 200) {
-        const connectionsWithDetails = await Promise.all(
-          connectionsResponse.data.map(async (conn) => {
-            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
-            const userDetails = await fetchUserDetails(otherUserId);
-            return {
-              ...conn,
-              otherUserId,
-              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User",
-              firstName: userDetails?.firstName || "",
-              lastName: userDetails?.lastName || "",
-              gender: userDetails?.gender || "",
-              birthDate: userDetails?.birthDate || "",
-              birthPlace: userDetails?.birthPlace || "",
-              status: userDetails?.status || "living",
-              dateOfDeath: userDetails?.dateOfDeath || "",
-              placeOfDeath: userDetails?.placeOfDeath || "",
-            };
-          })
-        );
-        setConnections(connectionsWithDetails);
+      const fetchByTreeId = async () => {
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/tree/${treeIdToFetch}`);
+        return normalizeApiArray(response.data);
+      };
+
+      const fetchByGroupId = async () => {
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/group/${groupIdToFetch}`);
+        return normalizeApiArray(response.data);
+      };
+
+      let data = [];
+      let usedEndpoint = "";
+
+      if (groupIdToFetch) {
+        try {
+          data = await fetchByGroupId();
+          usedEndpoint = "group";
+        } catch (error) {
+          if (error.response?.status === 404 && treeIdToFetch) {
+            data = await fetchByTreeId();
+            usedEndpoint = "tree";
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        data = await fetchByTreeId();
+        usedEndpoint = "tree";
+      }
+
+      if (!Array.isArray(data)) {
+        data = [];
+      }
+
+      const membersWithDetails = await Promise.all(
+        data.map(async (member) => {
+          const userDetails = member?.userId ? await fetchUserDetails(member.userId) : null;
+          return {
+            ...member,
+            userDetails,
+          };
+        })
+      );
+
+      setGroupMembers(membersWithDetails);
+      if (usedEndpoint === "group") {
+        console.debug("Loaded group members via group endpoint.");
+      } else if (usedEndpoint === "tree") {
+        console.debug("Loaded group members via tree endpoint fallback.");
       }
     } catch (error) {
-      console.error("Error fetching connections data:", error);
-      setConnections([]);
+      if (error.response?.status !== 404) {
+        console.error("Error fetching group members:", error);
+      }
+      setGroupMembers([]);
+    } finally {
+      setIsGroupMembersLoading(false);
     }
   };
 
@@ -545,6 +613,8 @@ function ViewGroupPage() {
       }
     } else {
       const { relationship, ...personDataToSend } = formData;
+      personDataToSend.gender = normalizeGender(personDataToSend.gender || personDataToSend.sex);
+      personDataToSend.status = normalizeStatus(personDataToSend.status || personDataToSend.livingStatus);
       personDataToSend.relationships = [];
       try {
         const createPersonResponse = await axios.post(`${BACKEND_BASE_URL}/api/persons/${treeId}`, personDataToSend);
@@ -652,7 +722,15 @@ function ViewGroupPage() {
     setSelectedPersonId(id);
     setSidebarOpen(true);
     setActionMenuOpen(false);
-    const d = personData.data || personData || {};
+    setActiveTab("Add member");
+
+    const personFromChart = personData?.data || personData || {};
+    const personFromList = people?.find((person) => getBackendPersonId(person) === id);
+    const d = personFromList?.data ?? personFromList ?? personFromChart;
+
+    const rawGender = d.gender ?? d.sex ?? "";
+    const rawStatus = d.status ?? d.livingStatus ?? "";
+
     setFormData({
       ...initialFormData,
       firstName: d["first name"] ?? d.firstName ?? "",
@@ -660,8 +738,8 @@ function ViewGroupPage() {
       lastName: d["last name"] ?? d.lastName ?? "",
       birthDate: d.birthDate ?? d.birthday ?? "",
       birthPlace: d.birthPlace ?? "",
-      gender: d.gender === "M" ? "male" : d.gender === "F" ? "female" : d.gender === "male" ? "male" : d.gender === "female" ? "female" : "",
-      status: d.status ?? "living",
+      gender: normalizeGender(rawGender),
+      status: normalizeStatus(rawStatus),
       dateOfDeath: d.dateOfDeath ?? "",
       placeOfDeath: d.placeOfDeath ?? "",
     });
@@ -671,6 +749,21 @@ function ViewGroupPage() {
     setSidebarOpen(false);
     setIsEditMode(false);
   };
+
+  const handleTabClick = (tab) => {
+    setActiveTab(tab);
+    if (tab === "Add member") {
+      setIsEditMode(false);
+      setSelectedPersonId(null);
+      setFormData({ ...initialFormData });
+    }
+  };
+
+  useEffect(() => {
+    if (isEditMode && activeTab !== "Add member") {
+      setActiveTab("Add member");
+    }
+  }, [isEditMode, activeTab]);
 
   const toggleActionMenu = () => setActionMenuOpen(!actionMenuOpen);
   const closeActionMenu = (e) => {
@@ -686,8 +779,8 @@ function ViewGroupPage() {
       lastName: personDetails.lastName || "",
       birthDate: personDetails.birthDate || "",
       birthPlace: personDetails.birthPlace || "",
-      gender: personDetails.gender || "",
-      status: personDetails.status || "living",
+      gender: normalizeGender(personDetails.gender || personDetails.sex),
+      status: normalizeStatus(personDetails.status || personDetails.livingStatus),
       dateOfDeath: personDetails.dateOfDeath || "",
       placeOfDeath: personDetails.placeOfDeath || "",
     });
@@ -712,7 +805,8 @@ function ViewGroupPage() {
           const firstName = source.firstName ?? source["first name"] ?? "";
           const lastName = source.lastName ?? source["last name"] ?? "";
           const birthday = source.birthDate ?? source.birthday ?? "";
-          const gender = toF3Gender(source.gender);
+          const gender = toF3Gender(source.gender ?? source.sex);
+          const status = normalizeStatus(source.status ?? source.livingStatus ?? "");
           const id = getBackendPersonId(person);
           if (!id) return null;
           return {
@@ -723,6 +817,7 @@ function ViewGroupPage() {
               "last name": lastName,
               birthday,
               gender,
+              status,
             },
             rels: getF3Relationships(person),
           };
@@ -750,36 +845,16 @@ function ViewGroupPage() {
 
           d3.select(card)
             .append("div")
-            .attr("style", "cursor: pointer; width: 20px; height: 20px;position: absolute; top: 0; right: 0;")
-            .html(f3.icons.userEditSvgIcon())
-            .select("svg")
-            .style("transition", "fill 0.2s ease-in-out")
-            .on("mouseenter", function () {
-              d3.select(this).style("fill", "#414141ff");
-            })
-            .on("mouseleave", function () {
-              d3.select(this).style("fill", "white");
-            })
-            .style("padding", "1")
-            .on("click", (e) => {
-              e.stopPropagation();
-              f3Card.onCardClickDefault(e, d);
-              setIsEditMode(true);
-              openSidebar(d);
-            });
-
-          d3.select(card)
-            .append("div")
             .attr(
               "style",
-              "cursor: pointer; width: 20px; height: 20px; position: absolute; top: 0; right: 46px; background: #e11d48; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;"
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 0; background: rgba(255,255,255,0.9); border: 1px solid rgba(229,62,62,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #dc2626; font-weight: 700;"
             )
             .html("×")
             .on("mouseenter", function () {
-              d3.select(this).style("background", "#be123c");
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
             })
             .on("mouseleave", function () {
-              d3.select(this).style("background", "#e11d48");
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
             })
             .on("click", (e) => {
               e.stopPropagation();
@@ -789,21 +864,51 @@ function ViewGroupPage() {
 
           d3.select(card)
             .append("div")
-            .attr("style", "cursor: pointer; width: 20px; height: 20px;position: absolute; top: 0; right: 23px;")
-            .html(f3.icons.userPlusSvgIcon())
-            .select("svg")
-            .style("transition", "fill 0.2s ease-in-out")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 23px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("+")
             .on("mouseenter", function () {
-              d3.select(this).style("fill", "#414141ff");
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
             })
             .on("mouseleave", function () {
-              d3.select(this).style("fill", "white");
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
             })
-            .style("padding", "1")
             .on("click", (e) => {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(false);
+              openSidebar(d);
+            });
+
+          if (d.data?.status === "deceased") {
+            d3.select(card)
+              .append("div")
+              .attr(
+                "style",
+                "position: absolute; top: 6px; left: 8px; color: #b91c1c; font-size: 12px; font-weight: 600;"
+              )
+              .text("Deceased");
+          }
+
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 46px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("✎")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              f3Card.onCardClickDefault(e, d);
+              setIsEditMode(true);
               openSidebar(d);
             });
         });
@@ -900,10 +1005,10 @@ function ViewGroupPage() {
               </button>
             </div>
             <div className="flex justify-around">
-              {['Add member', 'Connections', 'Import Tree'].map((tab) => (
+              {['Add member', 'Members', 'Import Tree'].map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => handleTabClick(tab)}
                   className={`mx-1 my-1 rounded-sm px-3 py-2 text-xs font-medium transition-colors flex-grow ${activeTab === tab ? "text-white" : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"}`}
                   style={activeTab === tab ? { backgroundColor: "#365643" } : {}}
                 >
@@ -1107,30 +1212,45 @@ function ViewGroupPage() {
             </form>
           )}
 
-          {activeTab === "Connections" && (
+          {activeTab === "Members" && (
             <div className="p-6 space-y-4 overflow-y-auto h-full">
-              {connections.map((person) => (
-                <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-400 overflow-hidden flex items-center justify-center">
-                      <span className="text-[#313131] text-xl font-bold">
-                        {person.firstName ? person.firstName.charAt(0) : ""}
-                        {person.lastName ? person.lastName.charAt(0) : ""}
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleAddToTree(person)}
-                    className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                    style={{ backgroundColor: "#365643" }}
-                  >
-                    Add to Tree
-                  </button>
+              {isGroupMembersLoading ? (
+                <div className="text-sm text-gray-500">Loading members...</div>
+              ) : groupMembers.length > 0 ? (
+                [...groupMembers]
+                  .sort((a, b) => {
+                    const aIsHost = String(a.role || "").toLowerCase() === "host";
+                    const bIsHost = String(b.role || "").toLowerCase() === "host";
+                    if (aIsHost && !bIsHost) return -1;
+                    if (!aIsHost && bIsHost) return 1;
+                    const aName = (a.userDetails ? `${a.userDetails.firstName || ""} ${a.userDetails.lastName || ""}` : "Unknown Member").trim().toLowerCase();
+                    const bName = (b.userDetails ? `${b.userDetails.firstName || ""} ${b.userDetails.lastName || ""}` : "Unknown Member").trim().toLowerCase();
+                    return aName.localeCompare(bName);
+                  })
+                  .map((member) => {
+                    const name = member.userDetails ? `${member.userDetails.firstName || ""} ${member.userDetails.lastName || ""}`.trim() : "Unknown Member";
+                    const initials = member.userDetails
+                      ? `${member.userDetails.firstName?.charAt(0) || ""}${member.userDetails.lastName?.charAt(0) || ""}`
+                      : "?";
+                    return (
+                      <div key={member.id || member.userId || name} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-400 overflow-hidden flex items-center justify-center">
+                            <span className="text-[#313131] text-xl font-bold">{initials}</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-800">{name}</h4>
+                            <p className="text-xs text-gray-500">{member.role || "Member"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                  No group members found for this tree.
                 </div>
-              ))}
+              )}
             </div>
           )}
 

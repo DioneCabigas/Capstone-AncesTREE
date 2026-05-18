@@ -254,7 +254,7 @@ function ViewGroupPage() {
             <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
             <p className="text-sm text-gray-600 mt-1">Your role: {currentUserRole || "Loading..."}</p>
           </div>
-          <Link href={`/group-tree?treeId=${group.treeId}`}>
+          <Link href={`/group-tree?treeId=${group.treeId}&groupId=${groupId}`}>
             <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">View Tree</button>
           </Link>
         </div>

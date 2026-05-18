@@ -176,34 +176,106 @@ function PersonalTree() {
     return rels;
   };
 
+  const fetchUserDetails = async (uid) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/user/${uid}`);
+      if (response.status === 200) {
+        return response.data;
+      }
+    } catch (error) {
+      console.error(`Error fetching user details for ${uid}:`, error);
+    }
+    return null;
+  };
+
+  const fetchConnectionsData = async (userId) => {
+    if (!userId) return;
+
+    try {
+      let connectionsResponse;
+      try {
+        connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/connections/${userId}`);
+      } catch (error) {
+        if (error.response?.status === 404) {
+          connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${userId}/connections`);
+        } else {
+          throw error;
+        }
+      }
+
+      if (connectionsResponse?.status === 200) {
+        const connectionsWithDetails = await Promise.all(
+          connectionsResponse.data.map(async (conn) => {
+            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
+            const userDetails = await fetchUserDetails(otherUserId);
+            const firstName = userDetails?.firstName || "";
+            const lastName = userDetails?.lastName || "";
+
+            return {
+              ...conn,
+              otherUserId,
+              firstName,
+              lastName,
+              name: userDetails ? `${firstName} ${lastName}`.trim() : "Unknown User",
+            };
+          })
+        );
+
+        setConnections(connectionsWithDetails);
+      }
+    } catch (error) {
+      console.error("Error fetching connections for personal tree:", error);
+      setConnections([]);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUserId) {
+      fetchConnectionsData(currentUserId);
+    }
+  }, [currentUserId]);
+
   const openSidebar = async (personData) => {
     const id = getBackendPersonId(personData);
     setSelectedPersonId(id);
     setSidebarOpen(true);
+    setActiveTab("form");
 
-    const d = personData.data || personData || {};
+    const personFromTree = treeData?.persons?.find((person) => getBackendPersonId(person) === id);
+    const source = personFromTree || personData;
+    const d = source?.data || source || {};
+
+    const firstName = d["first name"] ?? d.firstName ?? d.first_name ?? "";
+    const middleName = d["middle name"] ?? d.middleName ?? d.middle_name ?? "";
+    const lastName = d["last name"] ?? d.lastName ?? d.last_name ?? "";
+    const birthDate = d.birthDate ?? d.birthday ?? d.birth_date ?? "";
+    const birthPlace = d.birthPlace ?? d.birth_place ?? d.placeOfBirth ?? "";
+    const rawGender = (d.gender ?? d.sex ?? "").toString();
+    const gender = rawGender === "M" || rawGender.toLowerCase() === "male" ? "male" : rawGender === "F" || rawGender.toLowerCase() === "female" ? "female" : "";
+    const status = d.status ?? d.livingStatus ?? "living";
 
     setFormData({
       ...initialFormData,
-      firstName: d["first name"] ?? d.firstName ?? "",
-      middleName: d["middle name"] ?? d.middleName ?? "",
-      lastName: d["last name"] ?? d.lastName ?? "",
-      birthDate: d.birthDate ?? d.birthday ?? "",
-      birthPlace: d.birthPlace ?? "",
-      gender: d.gender === "M" ? "male" : d.gender === "F" ? "female" : d.gender === "male" ? "male" : d.gender === "female" ? "female" : "",
-      status: d.status ?? "living",
-      dateOfDeath: d.dateOfDeath ?? "",
-      placeOfDeath: d.placeOfDeath ?? "",
+      firstName,
+      middleName,
+      lastName,
+      birthDate,
+      birthPlace,
+      gender,
+      status,
+      dateOfDeath: d.dateOfDeath ?? d.date_of_death ?? "",
+      placeOfDeath: d.placeOfDeath ?? d.place_of_death ?? "",
     });
+
     console.log("PersonId in openSidebar:", id);
 
-    if (treeData.persons.length > 0) {
+    if (treeData?.persons?.length > 0) {
       setSuggestionsLoading(true);
       // await generateSuggestions(personId, treeData.persons); // Pass personId here
       setSuggestionsLoading(false);
     } else {
       console.log("Sidebar opened, but data not ready for suggestions.", {
-        peopleCount: treeData.persons.length,
+        peopleCount: treeData?.persons?.length,
       });
       setSuggestions([]); // Clear suggestions if data isn't ready
     }
@@ -716,40 +788,19 @@ function PersonalTree() {
           d3.select(this).select(".card").style("cursor", "default");
           const card = this.querySelector(".card-inner");
           // EDIT PERSON CARD BUTTON
-          d3.select(card)
-            .append("div")
-            .attr("style", "cursor: pointer; width: 20px; height: 20px;position: absolute; top: 0; right: 0;")
-            .html(f3.icons.userEditSvgIcon())
-            .select("svg")
-            .style("transition", "fill 0.2s ease-in-out")
-            .on("mouseenter", function () {
-              d3.select(this).style("fill", "#414141ff");
-            })
-            .on("mouseleave", function () {
-              d3.select(this).style("fill", "white");
-            })
-            .style("padding", "1")
-            .on("click", (e) => {
-              e.stopPropagation();
-              f3Card.onCardClickDefault(e, d);
-              setIsEditMode(true);
-              openSidebar(d);
-              console.log("Editing person:", d);
-            });
-
           // DELETE PERSON CARD BUTTON
           d3.select(card)
             .append("div")
             .attr(
               "style",
-              "cursor: pointer; width: 20px; height: 20px; position: absolute; top: 0; right: 46px; background: #e11d48; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700;"
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 0; background: rgba(255,255,255,0.9); border: 1px solid rgba(229,62,62,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #dc2626; font-weight: 700;"
             )
             .html("×")
             .on("mouseenter", function () {
-              d3.select(this).style("background", "#be123c");
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
             })
             .on("mouseleave", function () {
-              d3.select(this).style("background", "#e11d48");
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
             })
             .on("click", (e) => {
               e.stopPropagation();
@@ -760,22 +811,44 @@ function PersonalTree() {
           // ADD PERSON CARD BUTTON
           d3.select(card)
             .append("div")
-            .attr("style", "cursor: pointer; width: 20px; height: 20px;position: absolute; top: 0; right: 23px;")
-            .html(f3.icons.userPlusSvgIcon())
-            .select("svg")
-            .style("transition", "fill 0.2s ease-in-out")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 23px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("+")
             .on("mouseenter", function () {
-              d3.select(this).style("fill", "#414141ff");
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
             })
             .on("mouseleave", function () {
-              d3.select(this).style("fill", "white");
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
             })
-            .style("padding", "1")
             .on("click", (e) => {
               e.stopPropagation();
               f3Card.onCardClickDefault(e, d);
               setIsEditMode(false);
               openSidebar(d);
+            });
+
+          // EDIT PERSON CARD BUTTON
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 46px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("✎")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              f3Card.onCardClickDefault(e, d);
+              setIsEditMode(true);
+              openSidebar(d);
+              console.log("Editing person:", d);
             });
         });
 
@@ -831,11 +904,10 @@ function PersonalTree() {
           <div className="border-b border-gray-200">
             <div className="flex justify-around">
               {(isEditMode
-                ? [{ id: "form", label: "Edit member" }]
+                ? [{ id: "form", label: "Edit member details" }]
                 : [
                     { id: "form", label: "Add member" },
                     { id: "connections", label: "Connections" },
-                    { id: "suggestions", label: "Suggestions" },
                   ]
               ).map(({ id, label }) => (
                 <button
@@ -1161,61 +1233,6 @@ function PersonalTree() {
             </div>
           )}
 
-          {/* Suggestions Tab */}
-          {activeTab === "suggestions" && (
-            <div className="p-6 space-y-4 overflow-y-auto h-full">
-              <div className="mb-4">
-                {/* <h3 className="text-sm font-semibold text-gray-800 mb-1">You might be related to the following people:</h3> */}
-                <p className="text-xs text-gray-600">You might be related to these following people</p>
-              </div>
-
-              {suggestionsLoading ? (
-                <div className="flex justify-center items-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
-                  <span className="ml-2 text-sm text-gray-600">Loading suggestions...</span>
-                </div>
-              ) : (
-                suggestions.map((person) => (
-                  <div key={person.id} className="space-y-2">
-                    <p className="text-xs text-gray-700">
-                      {/* <span className="font-medium">Related to:</span> {person.relatedTo} in your tree */}
-                      {person.details}
-                    </p>
-                    <div className="border border-gray-300 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
-                            <span className="text-[#313131] text-xl font-bold">
-                              {person.firstName ? person.firstName.charAt(0) : ""}
-                              {person.lastName ? person.lastName.charAt(0) : ""}
-                            </span>
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                            <p className="text-xs text-gray-500">{person.timeframe}</p>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2">
-                          <a href={`/profile?userId=${person.id}`} className="text-[#313131] hover:underline font-medium block text-md">
-                            <button className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-xs font-medium hover:bg-gray-50 transition-colors">
-                              View
-                            </button>
-                          </a>
-                          <button
-                            onClick={() => handleAddToTree(person.potentialConnection)}
-                            className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                            style={{ backgroundColor: "#365643" }}
-                          >
-                            Add to Tree
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
         </div>
       </div>
     </Layout>
