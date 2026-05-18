@@ -1,41 +1,26 @@
-"use client";
+﻿"use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import Layout from '@/components/Layout';
 import AuthController from '@/components/AuthController';
-import React, { useState, useEffect } from "react";
-import { MoreHorizontal, Plus, User, Edit3, UserPlus, X, Users, Bell } from "lucide-react";
-import ReactFlow, { ReactFlowProvider, Background, Controls, useReactFlow } from "reactflow";
-import dagre from "dagre";
-import "reactflow/dist/style.css";
-import PersonNode from "@/components/PersonNode";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { Edit3, UserPlus, Upload, CheckCircle, XCircle } from "lucide-react";
 import axios from "axios";
+import * as d3 from "d3";
+import * as f3 from "family-chart";
+import "family-chart/styles/family-chart.css";
+import { initialPersonFormData } from "@/app/utils/constants";
 
-const nodeTypes = {
-  person: PersonNode,
-  marriage: () => null,
-};
-
-const initialFormData = {
-  relationship: "",
-  firstName: "",
-  middleName: "",
-  lastName: "",
-  birthDate: "",
-  birthPlace: "",
-  gender: "",
-  status: "living",
-  dateOfDeath: "",
-  placeOfDeath: "",
-};
+const initialFormData = initialPersonFormData;
 
 function ViewGroupPage() {
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
   const router = useRouter();
   const searchParams = useSearchParams();
   const treeId = searchParams.get("treeId");
+  const groupId = searchParams.get("groupId");
   const [isCurrentUsersTree, setIsCurrentUsersTree] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -45,18 +30,125 @@ function ViewGroupPage() {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("Add member");
   const [formData, setFormData] = useState({ ...initialFormData });
-  const [isValid, setIsValid] = useState(false);
   const [people, setPeople] = useState([]);
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [personDetailsInModal, setPersonDetailsInModal] = useState(null);
-  const [connections, setConnections] = useState([]);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [isGroupMembersLoading, setIsGroupMembersLoading] = useState(false);
 
-  const getSortedSpouseIds = (id1, id2) => {
-    return id1 < id2 ? [id1, id2] : [id2, id1];
+  const [isChartReady, setIsChartReady] = useState(false);
+  const chartRef = useRef(null);
+  const chartInstanceRef = useRef(null);
+
+  // Import Tree states
+  const [personalTrees, setPersonalTrees] = useState([]);
+  const [importRequests, setImportRequests] = useState([]);
+  const [selectedPersonalTreeId, setSelectedPersonalTreeId] = useState(null);
+  const [selectedPersonalTreePersons, setSelectedPersonalTreePersons] = useState([]);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importPreviewSummary, setImportPreviewSummary] = useState(null);
+  const [isImportRequestLoading, setIsImportRequestLoading] = useState(false);
+  const [userRole, setUserRole] = useState(null);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
+  const [toast, setToast] = useState({ message: "", type: "success", visible: false });
+
+  const getBackendPersonId = (person) => {
+    return (
+      person?.personId ??
+      person?.data?.personId ??
+      person?._id ??
+      person?.id ??
+      person?.data?._id ??
+      person?.data?.id ??
+      null
+    );
+  };
+
+  const getPersonRelationships = (person) => {
+    return (
+      person?.relationships ??
+      person?.rels ??
+      person?.data?.relationships ??
+      person?.data?.rels ??
+      []
+    );
+  };
+
+  const getExistingRelationshipIds = (person, type) => {
+    return getPersonRelationships(person)
+      .filter((rel) => rel && rel.relatedPersonId && String(rel.type).toLowerCase() === type)
+      .map((rel) => rel.relatedPersonId);
+  };
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type, visible: true });
+    window.setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 4000);
+  };
+
+  const getCoParentIdsFromExistingChildren = (personId) => {
+    const person = people?.find((p) => getBackendPersonId(p) === personId);
+    if (!person) return [];
+
+    const childIds = getExistingRelationshipIds(person, "child");
+    const coParents = new Set();
+
+    childIds.forEach((childId) => {
+      const child = people?.find((p) => getBackendPersonId(p) === childId);
+      if (!child) return;
+      getExistingRelationshipIds(child, "parent").forEach((parentId) => {
+        if (parentId !== personId) {
+          coParents.add(parentId);
+        }
+      });
+    });
+
+    return Array.from(coParents);
+  };
+
+  const toF3Gender = (gender) => {
+    const value = String(gender || "").toLowerCase();
+    if (value.startsWith("m")) return "M";
+    if (value.startsWith("f")) return "F";
+    return "";
+  };
+
+  const normalizeGender = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "m" || normalized === "male") return "male";
+    if (normalized === "f" || normalized === "female") return "female";
+    return "";
+  };
+
+  const normalizeStatus = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "deceased" || normalized === "dead") return "deceased";
+    if (normalized === "living" || normalized === "alive") return "living";
+    return "living";
+  };
+
+  const getF3Relationships = (person) => {
+    const relationships = getPersonRelationships(person);
+    const rels = { parents: [], children: [], spouses: [] };
+
+    relationships.forEach((rel) => {
+      if (!rel || !rel.relatedPersonId || !rel.type) return;
+      const type = String(rel.type).toLowerCase();
+      if (type === "parent") rels.parents.push(rel.relatedPersonId);
+      else if (type === "child") rels.children.push(rel.relatedPersonId);
+      else if (type === "spouse") rels.spouses.push(rel.relatedPersonId);
+    });
+
+    return rels;
+  };
+
+  const setChartRef = (element) => {
+    chartRef.current = element;
+    if (element) {
+      setIsChartReady(true);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -79,439 +171,578 @@ function ViewGroupPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        console.log("User logged in:", user.uid);
         setCurrentUserId(user.uid);
         try {
           const profileResponse = await axios.get(`${BACKEND_BASE_URL}/api/user/${user.uid}`);
           setCurrentUser(profileResponse.data);
-          console.log("Fetched user profile: ", profileResponse.data);
         } catch (error) {
-          console.log("Failed to fetch current user profile.", error);
+          console.error("Failed to fetch current user profile.", error);
         }
       } else {
-        console.log("User logged out.");
         setCurrentUser(null);
         setCurrentUserId(null);
-        setNodes([]);
-        setEdges([]);
+        setUserRole(null);
+        setIsRoleLoading(false);
         setPeople([]);
       }
     });
-
-    return () => {
-      console.log("Cleaning up auth state listener.");
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
-  // FETCH TREE DATA USE EFFECT
   useEffect(() => {
-    if (currentUserId && currentUser) {
-      const isCurrentUsersTreeBool = true;
-      console.log("Both UID and User Profile are ready. Fetching tree data.");
-      setIsCurrentUsersTree(true);
-      fetchTreeData(treeId, isCurrentUsersTreeBool);
-      fetchConnectionsData(currentUserId); //new
-    } else if (!currentUserId && !currentUser) {
-      console.log("User logged out or profile not loaded yet.");
-      setNodes([]);
-      setEdges([]);
-      setPeople([]);
+    if (currentUserId) {
+      fetchPersonalTrees(currentUserId);
     }
-  }, [currentUserId, currentUser, treeId]);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (currentUserId && treeId) {
+      checkUserRole(currentUserId, treeId);
+    }
+  }, [currentUserId, treeId]);
+
+  useEffect(() => {
+    if (treeId) {
+      fetchTreeData(treeId);
+      fetchGroupMembers(treeId, groupId);
+      if (userRole === "Host") fetchImportRequests(treeId);
+    }
+  }, [treeId, groupId, userRole]);
+
+  // Poll pending import requests when the current user is the Host
+  useEffect(() => {
+    if (!treeId || userRole !== "Host") return;
+    let interval = null;
+    const startPolling = () => {
+      // initial fetch
+      fetchImportRequests(treeId);
+      interval = setInterval(() => {
+        fetchImportRequests(treeId);
+      }, 30000); // poll every 30 seconds
+    };
+    startPolling();
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [treeId, userRole]);
 
   const fetchUserDetails = async (uid) => {
     try {
       const response = await axios.get(`${BACKEND_BASE_URL}/api/user/${uid}`);
-      if (response.status === 200) {
-        return response.data;
-      }
-      return null;
+      return response.status === 200 ? response.data : null;
     } catch (error) {
       console.error(`Error fetching user details for ${uid}:`, error);
       return null;
     }
   };
 
-  // FETCH CONNECTIONS
-  const fetchConnectionsData = async (userId) => {
-    try {
-      let connectionsResponse;
+  const normalizeApiArray = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== "object") return [];
 
-      // First attempt - alternative endpoint format
-      try {
-        connectionsResponse = await axios.get(`${BACKEND_BASE_URL}/api/connections/${userId}`);
-      } catch (error) {
-        console.error("Failed to fetch connections data:", error);
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.members)) return payload.members;
+
+    const nestedArray = Object.values(payload).find((value) => Array.isArray(value));
+    if (nestedArray) return nestedArray;
+
+    if (payload.data && typeof payload.data === "object") return normalizeApiArray(payload.data);
+    if (payload.member && typeof payload.member === "object") return [payload.member];
+    if (payload.userId || payload.id || payload.role) return [payload];
+
+    return [];
+  };
+
+  const fetchGroupMembers = async (treeIdToFetch, groupIdToFetch) => {
+    if (!treeIdToFetch && !groupIdToFetch) return;
+
+    setIsGroupMembersLoading(true);
+    try {
+      const fetchByTreeId = async () => {
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/tree/${treeIdToFetch}`);
+        return normalizeApiArray(response.data);
+      };
+
+      const fetchByGroupId = async () => {
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/group/${groupIdToFetch}`);
+        return normalizeApiArray(response.data);
+      };
+
+      let data = [];
+      let usedEndpoint = "";
+
+      if (groupIdToFetch) {
+        try {
+          data = await fetchByGroupId();
+          usedEndpoint = "group";
+        } catch (error) {
+          if (error.response?.status === 404 && treeIdToFetch) {
+            data = await fetchByTreeId();
+            usedEndpoint = "tree";
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        data = await fetchByTreeId();
+        usedEndpoint = "tree";
       }
 
-      if (connectionsResponse.status === 200) {
-        // For each connection, get the other user's details
-        const connectionsWithDetails = await Promise.all(
-          connectionsResponse.data.map(async (conn) => {
-            // Use the connectionWith field if available, otherwise determine it
-            const otherUserId = conn.connectionWith || (conn.requester === userId ? conn.receiver : conn.requester);
+      if (!Array.isArray(data)) {
+        data = [];
+      }
 
-            const userDetails = await fetchUserDetails(otherUserId);
+      const membersWithDetails = await Promise.all(
+        data.map(async (member) => {
+          const userDetails = member?.userId ? await fetchUserDetails(member.userId) : null;
+          return {
+            ...member,
+            userDetails,
+          };
+        })
+      );
 
-            return {
-              ...conn,
-              otherUserId,
-              name: userDetails ? `${userDetails.firstName} ${userDetails.lastName}` : "Unknown User",
-              firstName: userDetails ? userDetails.firstName : "",
-              lastName: userDetails ? userDetails.lastName : "",
-              gender: userDetails ? userDetails.gender : "",
-              birthDate: userDetails ? userDetails.birthDate : "",
-              birthPlace: userDetails ? userDetails.birthPlace : "",
-              status: userDetails ? userDetails.status : "living",
-              dateOfDeath: userDetails ? userDetails.dateOfDeath : "",
-              placeOfDeath: userDetails ? userDetails.placeOfDeath : "",
-            };
-          })
-        );
-
-        setConnections(connectionsWithDetails);
+      setGroupMembers(membersWithDetails);
+      if (usedEndpoint === "group") {
+        console.debug("Loaded group members via group endpoint.");
+      } else if (usedEndpoint === "tree") {
+        console.debug("Loaded group members via tree endpoint fallback.");
       }
     } catch (error) {
-      console.error("Error fetching connections data:", error);
-      setError("Failed to load connections. Please check console for details.");
-      setConnections([]);
+      if (error.response?.status !== 404) {
+        console.error("Error fetching group members:", error);
+      }
+      setGroupMembers([]);
+    } finally {
+      setIsGroupMembersLoading(false);
     }
   };
 
-  const transformPeopleToNodes = (people, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool) => {
-    return people.map((person) => ({
-      id: person.personId,
-      type: "person",
-      position: { x: 0, y: 0 },
-      data: {
-        personId: person.personId,
-        firstName: person.firstName,
-        middleName: person.middleName,
-        lastName: person.lastName,
-        gender: person.gender,
-        birthDate: person.birthDate,
-        birthPlace: person.birthPlace,
-        status: person.status,
-        // fields for deceased?
-        relationships: person.relationships.map((rel) => ({
-          relatedPersonId: rel.relatedPersonId,
-          type: rel.type,
-        })),
+  const fetchPersonalTrees = async (userId) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-trees/personal/${userId}`);
+      let data = [];
 
-        // Functions
-        openSidebar: openSidebar,
-        handleDeletePerson: handleDeletePerson,
-        handleViewPerson: handleViewPerson,
-        handleEditPerson: (personData) => {
-          setSelectedPersonId(personData.personId);
-          setFormData(personData);
-          setIsEditMode(true);
-          setSidebarOpen(true);
-        },
-        isCurrentUsersTree: isCurrentUsersTreeBool,
-      },
-    }));
+      if (Array.isArray(response.data)) {
+        data = response.data;
+      } else if (response.data) {
+        if (response.data.treeId || response.data.id) {
+          data = [response.data];
+        } else if (Array.isArray(response.data.trees)) {
+          data = response.data.trees;
+        } else if (Array.isArray(response.data.data)) {
+          data = response.data.data;
+        }
+      }
+
+      setPersonalTrees(data);
+    } catch (error) {
+      console.error("Error fetching personal trees:", error);
+      setPersonalTrees([]);
+    }
   };
 
-  const handleViewPerson = (personData) => {
-    setPersonDetailsInModal(personData);
-    setIsModalOpen(true);
+  const checkUserRole = async (userId, treeId) => {
+    if (!userId || !treeId) {
+      setUserRole(null);
+      setIsRoleLoading(false);
+      return;
+    }
+
+    setIsRoleLoading(true);
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/family-group-members/tree/${treeId}/user/${userId}`);
+      const member = response.data?.data ?? response.data;
+      const role = member?.role || null;
+      setUserRole(role);
+    } catch (error) {
+      console.error("Error checking user role:", error);
+      setUserRole(null);
+    } finally {
+      setIsRoleLoading(false);
+    }
   };
 
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setPersonDetailsInModal(null);
+  const fetchImportRequests = async (treeId) => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/pending`);
+      const respData = response.data;
+
+      let data = [];
+      if (Array.isArray(respData)) data = respData;
+      else if (respData && typeof respData === "object") {
+        // common wrappers
+        if (Array.isArray(respData.requests)) data = respData.requests;
+        else if (Array.isArray(respData.data)) data = respData.data;
+        else if (Array.isArray(respData.items)) data = respData.items;
+        else {
+          // try to find the first array property on the object
+          const arrProp = Object.keys(respData).find((k) => Array.isArray(respData[k]));
+          if (arrProp) data = respData[arrProp];
+        }
+      }
+
+      setImportRequests(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Error fetching import requests:", error);
+      setImportRequests([]);
+    }
   };
 
-  const transformPeopleToEdges = (people) => {
-    const reactFlowEdges = [];
-    const dagreNodes = new Map();
-    const dagreEdges = [];
+  const normalizeName = (value) => String(value || "").trim().toLowerCase();
 
-    const getPersonById = (id) => people.find((p) => p.personId === id);
+  const getPersonalTreeLabel = (tree) => {
+    const userName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ");
+    if (userName) {
+      return `${userName} Tree`;
+    }
+    if (tree?.name) {
+      return tree.name;
+    }
+    return "Personal Tree";
+  };
 
-    const addedReactFlowEdges = new Set();
-    const addedDagreEdges = new Set();
-    const processedSpousePairs = new Set();
+  const buildImportPreview = (importPeople) => {
+    if (!importPeople || !Array.isArray(importPeople)) {
+      setImportPreview(null);
+      setImportPreviewSummary(null);
+      return;
+    }
 
-    people.forEach((person) => {
-      dagreNodes.set(person.personId, { id: person.personId, type: "person" });
-    });
+    const matches = importPeople.map((importPerson) => {
+      const importedFirstName = normalizeName(importPerson.firstName || importPerson["first name"]);
+      const importedLastName = normalizeName(importPerson.lastName || importPerson["last name"]);
+      const importedBirthDate = String(importPerson.birthDate || importPerson.birthday || "").trim();
 
-    people.forEach((person) => {
-      person.relationships.forEach((rel) => {
-        const targetPerson = getPersonById(rel.relatedPersonId);
-        if (!targetPerson) return;
+      const matchedPerson = people.find((existingPerson) => {
+        const existingSource = existingPerson.data || existingPerson;
+        const existingFirstName = normalizeName(existingSource.firstName || existingSource["first name"]);
+        const existingLastName = normalizeName(existingSource.lastName || existingSource["last name"]);
+        const existingBirthDate = String(existingSource.birthDate || existingSource.birthday || "").trim();
 
-        const lowercaseRelType = rel.type.toLowerCase();
+        if (!importedFirstName || !importedLastName || !existingFirstName || !existingLastName) return false;
 
-        // Parent - Child Logic
-        let parentId, childId;
-        if (lowercaseRelType === "child") {
-          parentId = person.personId;
-          childId = rel.relatedPersonId;
-        } else if (lowercaseRelType === "parent") {
-          parentId = rel.relatedPersonId;
-          childId = person.personId;
-        }
+        const nameMatch = importedFirstName === existingFirstName && importedLastName === existingLastName;
+        const birthMatch = importedBirthDate && existingBirthDate ? importedBirthDate === existingBirthDate : true;
 
-        if (parentId && childId) {
-          const edgeKey = `P_${parentId}-${childId}`;
-          if (!addedReactFlowEdges.has(edgeKey)) {
-            reactFlowEdges.push({
-              id: `e-${parentId}-${childId}-parentOf`,
-              source: childId,
-              target: parentId,
-              // label: "parent of",
-              type: "smoothstep",
-              // sourceHandle: "bottom",
-              // targetHandle: "top",
-            });
-            addedReactFlowEdges.add(edgeKey);
-          }
-          const dagreEdgeKey = `D_${parentId}-${childId}`;
-          if (!addedDagreEdges.has(dagreEdgeKey)) {
-            dagreEdges.push({ source: childId, target: parentId });
-            addedDagreEdges.add(dagreEdgeKey);
-          }
-        }
-
-        // Spouse Logic
-        else if (lowercaseRelType === "spouse") {
-          const [id1, id2] = getSortedSpouseIds(person.personId, rel.relatedPersonId);
-          const spouseEdgeKey = `S_${id1}-${id2}`;
-
-          if (!addedReactFlowEdges.has(spouseEdgeKey)) {
-            reactFlowEdges.push({
-              id: `e-${id1}-${id2}-spouseOf`,
-              source: id1,
-              target: id2,
-              // label: "spouse of",
-              type: "smoothstep",
-              // sourceHandle: "right",
-              // targetHandle: "left",
-            });
-            addedReactFlowEdges.add(spouseEdgeKey);
-          }
-
-          const dagreSpouseEdgeKey = `DS_${id1}-${id2}`;
-          if (!addedDagreEdges.has(dagreSpouseEdgeKey)) {
-            dagreEdges.push({
-              source: id1,
-              target: id2,
-              minlen: 1,
-              constraint: "same",
-            });
-            addedDagreEdges.add(dagreSpouseEdgeKey);
-          }
-        }
+        return nameMatch && birthMatch;
       });
-    });
 
-    return { reactFlowEdges, dagreEdges };
-  };
-
-  const applyLayout = (nodes, { reactFlowEdges, dagreEdges }, direction = "TB") => {
-    const dagreGraph = new dagre.graphlib.Graph();
-    dagreGraph.setDefaultEdgeLabel(() => ({}));
-
-    dagreGraph.setGraph({
-      rankdir: direction,
-      nodesep: 50,
-      ranksep: 100,
-      // ranker: "tight-tree",
-    });
-
-    const nodeWidth = 200;
-    const nodeHeight = 150;
-
-    nodes.forEach((node) => {
-      dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
-    });
-
-    dagreEdges.forEach((edge) => {
-      dagreGraph.setEdge(edge.source, edge.target, { minlen: edge.minlen || 1 });
-    });
-
-    dagre.layout(dagreGraph);
-
-    const layoutedNodes = nodes.map((node) => {
-      const nodeWithPosition = dagreGraph.node(node.id);
       return {
-        ...node,
-        position: {
-          x: nodeWithPosition.x - nodeWidth / 2,
-          y: nodeWithPosition.y - nodeHeight / 2,
-        },
+        importPerson,
+        matchedPerson,
       };
     });
 
-    return { layoutedNodes, reactFlowEdges };
+    const matchedCount = matches.filter((item) => item.matchedPerson).length;
+    setImportPreview(matches);
+    setImportPreviewSummary({
+      groupPersonCount: people.length,
+      importPersonCount: importPeople.length,
+      matchedCount,
+      newPersonCount: importPeople.length - matchedCount,
+    });
   };
 
-  // FETCH TREE DATA
-  const fetchTreeData = async (treeId, isCurrentUsersTreeBool) => {
-    if (!treeId) {
-      console.warn("Cannot fetch tree data: UID is null."); //test
+  const fetchPersonalTreePersons = async (personalTreeId) => {
+    if (!personalTreeId) return;
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${personalTreeId}`);
+      const importedPersons = response.data || [];
+      setSelectedPersonalTreePersons(importedPersons);
+      buildImportPreview(importedPersons);
+    } catch (error) {
+      console.error("Error fetching personal tree persons:", error);
+      setSelectedPersonalTreePersons([]);
+      setImportPreview(null);
+      setImportPreviewSummary(null);
+    }
+  };
+
+  const handleSelectPersonalTree = async (personalTreeId) => {
+    setSelectedPersonalTreeId(personalTreeId);
+    await fetchPersonalTreePersons(personalTreeId);
+  };
+
+  const handleSubmitImportRequest = async () => {
+    if (!selectedPersonalTreeId || !treeId) {
+      showToast("Please select a personal tree to import.", "error");
       return;
     }
-    console.log("Fetching tree data...");
-    console.log("isCurrentUsersTreeBool: ", isCurrentUsersTreeBool);
-    console.log("isCurrentUsersTree: ", isCurrentUsersTree);
+    if (!currentUserId || !currentUser) {
+      showToast("Unable to submit import request: user information is missing.", "error");
+      return;
+    }
 
-    setIsLoading(true);
-    let treeIdToUse = treeId;
-
+    setIsImportRequestLoading(true);
     try {
-      if (treeIdToUse) {
-        console.log("Fetching persons for tree ID:", treeIdToUse);
-        const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToUse}`);
-        const fetchedPeople = personsResponse.data;
-        console.log("People data:", fetchedPeople);
-        setPeople(fetchedPeople);
-
-        const newNodes = transformPeopleToNodes(fetchedPeople, openSidebar, handleDeletePerson, handleViewPerson, isCurrentUsersTreeBool);
-        const { reactFlowEdges, dagreEdges } = transformPeopleToEdges(fetchedPeople);
-
-        const { layoutedNodes, reactFlowEdges: finalReactFlowEdges } = applyLayout(newNodes, { reactFlowEdges, dagreEdges });
-
-        setNodes(layoutedNodes);
-        setEdges(finalReactFlowEdges);
-      } else {
-        console.error("No treeId available to fetch persons.");
+      await axios.post(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/create`, {
+        personalTreeId: selectedPersonalTreeId,
+        requestorId: currentUserId,
+        requestorName: `${currentUser?.firstName || ""} ${currentUser?.lastName || ""}`.trim(),
+      });
+      showToast("Import request submitted. The host will review it.", "success");
+      if (userRole === "Host") {
+        await fetchImportRequests(treeId);
       }
     } catch (error) {
+      console.error("Error submitting import request:", error);
+      showToast("Failed to submit import request. Please try again.", "error");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleApproveImportRequest = async (requestId) => {
+    if (!requestId) return;
+    setIsImportRequestLoading(true);
+    try {
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/approve`, {
+        reviewedBy: currentUserId,
+      });
+      if (treeId) {
+        await fetchImportRequests(treeId);
+        await fetchTreeData(treeId);
+      }
+      showToast("Import request approved and merged into the group tree.", "success");
+    } catch (error) {
+      console.error("Error approving import request:", error);
+      showToast("Failed to approve import request. Please try again.", "error");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleRejectImportRequest = async (requestId) => {
+    if (!requestId) return;
+    setIsImportRequestLoading(true);
+    try {
+      await axios.put(`${BACKEND_BASE_URL}/api/import-tree-req/${requestId}/reject`, {
+        reviewedBy: currentUserId,
+      });
+      if (treeId) {
+        await fetchImportRequests(treeId);
+      }
+      showToast("Import request rejected.", "success");
+    } catch (error) {
+      console.error("Error rejecting import request:", error);
+      showToast("Failed to reject import request. Please try again.", "error");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const handleMergeSelectedTreeNow = async () => {
+    if (!selectedPersonalTreeId || !treeId) {
+      showToast("Please select a personal tree to merge.", "error");
+      return;
+    }
+    if (!importPreview) {
+      showToast("Please load tree preview before merging.", "error");
+      return;
+    }
+
+    setIsImportRequestLoading(true);
+    try {
+      await axios.post(`${BACKEND_BASE_URL}/api/import-tree-req/${treeId}/create`, {
+        personalTreeId: selectedPersonalTreeId,
+        requestorId: currentUserId,
+        preview: importPreview,
+      });
+
+      if (treeId) {
+        await fetchTreeData(treeId);
+        if (userRole === "Host") {
+          await fetchImportRequests(treeId);
+        }
+      }
+
+      showToast("Selected personal tree import request has been submitted.", "success");
+    } catch (error) {
+      console.error("Error merging selected tree:", error);
+      showToast("Failed to merge tree. Please try again.", "error");
+    } finally {
+      setIsImportRequestLoading(false);
+    }
+  };
+
+  const fetchTreeData = async (treeIdToFetch) => {
+    if (!treeIdToFetch) {
+      console.warn("Cannot fetch tree data: treeId is missing.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const personsResponse = await axios.get(`${BACKEND_BASE_URL}/api/persons/tree/${treeIdToFetch}`);
+      setPeople(personsResponse.data || []);
+    } catch (error) {
       console.error("Failed to fetch tree data:", error);
+      setPeople([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const createTree = async (uid, userProfileData) => {
-    let treeIdToUse = null;
+  const handleDeletePerson = async (personIdToDelete) => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this person? This action cannot be undone.");
+    if (!confirmDelete) return;
+    setIsLoading(true);
     try {
-      const newTreeId = await axios.post(`${BACKEND_BASE_URL}/api/family-trees/newTree`, {
-        userId: uid,
-        treeName: uid,
-        firstName: userProfileData?.firstName || "My",
-        middleName: userProfileData?.middleName || "",
-        lastName: userProfileData?.lastName || "Self",
-        birthDate: userProfileData?.birthDate || "",
-        birthPlace: userProfileData?.birthPlace || "",
-        gender: "",
-        status: "living",
-        relationships: [],
-      });
-
-      treeIdToUse = newTreeId.data.treeId;
-      console.log("New Personal tree created: ", treeIdToUse);
-      return treeIdToUse;
+      await axios.delete(`${BACKEND_BASE_URL}/api/persons/${personIdToDelete}`);
+      await fetchTreeData(treeId);
     } catch (error) {
-      console.error("Error creating new tree or first person:", error);
-      throw error;
+      console.error("Error deleting person:", error?.response?.data || error.message);
+      alert(`Failed to delete person: ${error?.response?.data?.message || error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAddPerson = async () => {
+  const handleAddPerson = async (event) => {
     event.preventDefault();
     setIsLoading(true);
     if (isEditMode && selectedPersonId) {
-      // EDIT
       try {
         await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, formData);
-        console.log(`Successfully updated person ${selectedPersonId}`, formData);
       } catch (error) {
         console.error("Error updating person:", error);
         alert(`Failed to update person: ${error.response?.data?.message || error.message}`);
+        setIsLoading(false);
         return;
       }
     } else {
-      console.log("PersonId:", selectedPersonId);
-      console.log("Adding person:", formData);
-
       const { relationship, ...personDataToSend } = formData;
+      personDataToSend.gender = normalizeGender(personDataToSend.gender || personDataToSend.sex);
+      personDataToSend.status = normalizeStatus(personDataToSend.status || personDataToSend.livingStatus);
       personDataToSend.relationships = [];
-
-      console.log("Sending person data:", personDataToSend);
-      console.log("Relationship to establish:", relationship);
-      console.log("Targeting treeId:", treeId);
-
       try {
-        const createPersonResponse = await axios.post(`${BACKEND_BASE_URL}/api/persons/${treeId}`, {
-          ...personDataToSend,
-        });
+        const createPersonResponse = await axios.post(`${BACKEND_BASE_URL}/api/persons/${treeId}`, personDataToSend);
         const newPerson = createPersonResponse.data;
-        console.log(`Successfully added person to tree ${treeId}: `, newPerson);
-
         if (newPerson && selectedPersonId && relationship) {
           let sourceRelationshipType;
           let targetRelationshipType;
-
           if (relationship === "parent") {
-            sourceRelationshipType = "child";
-            targetRelationshipType = "parent";
-          } else if (relationship === "child") {
             sourceRelationshipType = "parent";
             targetRelationshipType = "child";
+          } else if (relationship === "child") {
+            sourceRelationshipType = "child";
+            targetRelationshipType = "parent";
           } else if (relationship === "spouse") {
             sourceRelationshipType = "spouse";
             targetRelationshipType = "spouse";
-          } else {
-            console.warn("Unknown relationship type:", relationship);
-            return;
           }
-
-          try {
-            await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, {
-              relationships: [
-                {
-                  relatedPersonId: newPerson.personId,
-                  type: sourceRelationshipType,
-                },
-              ],
-            });
-            console.log(`Successfully updated relationship for person ${selectedPersonId}:`);
-          } catch (error) {
-            console.warn(`Error adding relationship to selected person ${selectedPersonId}: `, error);
-            return;
+          if (sourceRelationshipType && targetRelationshipType) {
+            const selectedPerson = people?.find((person) => getBackendPersonId(person) === selectedPersonId);
+            const selectedExistingRelationships = getPersonRelationships(selectedPerson);
+            const selectedPersonParentIds = getExistingRelationshipIds(selectedPerson, "parent");
+            const selectedSpouseIds = getExistingRelationshipIds(selectedPerson, "spouse");
+            const inferredCoParentIds = getCoParentIdsFromExistingChildren(selectedPersonId);
+            const coParentIds = Array.from(new Set([...selectedSpouseIds, ...inferredCoParentIds]));
+            let spouseConnectIds = [];
+            if (relationship === "parent" && selectedPersonParentIds.length > 0) {
+              const confirmConnect = window.confirm("This child already has another parent. Do you want to connect the new parent with the existing parent(s) as spouses?");
+              if (confirmConnect) spouseConnectIds = selectedPersonParentIds;
+            }
+            try {
+              await axios.put(`${BACKEND_BASE_URL}/api/persons/${selectedPersonId}`, {
+                relationships: [
+                  ...selectedExistingRelationships,
+                  { relatedPersonId: newPerson.personId, type: sourceRelationshipType },
+                ],
+              });
+            } catch (error) {
+              console.warn(`Error adding relationship to selected person ${selectedPersonId}:`, error);
+            }
+            const updatedNewPersonRelationships = [{ relatedPersonId: selectedPersonId, type: targetRelationshipType }];
+            if (relationship === "child" && coParentIds.length > 0) {
+              coParentIds.forEach((parentId) => {
+                if (parentId !== selectedPersonId) updatedNewPersonRelationships.push({ relatedPersonId: parentId, type: "parent" });
+              });
+            }
+            if (relationship === "parent" && spouseConnectIds.length > 0) {
+              spouseConnectIds.forEach((parentId) => {
+                if (parentId !== newPerson.personId) updatedNewPersonRelationships.push({ relatedPersonId: parentId, type: "spouse" });
+              });
+            }
+            try {
+              await axios.put(`${BACKEND_BASE_URL}/api/persons/${newPerson.personId}`, { relationships: updatedNewPersonRelationships });
+            } catch (error) {
+              console.warn(`Error updating relationships for new person ${newPerson.personId}:`, error);
+            }
+            if (relationship === "parent" && spouseConnectIds.length > 0) {
+              for (const parentId of spouseConnectIds) {
+                const parentPerson = people?.find((person) => getBackendPersonId(person) === parentId);
+                if (!parentPerson) continue;
+                const parentRelationships = getPersonRelationships(parentPerson);
+                const hasSpouseRelation = parentRelationships.some((rel) => rel.relatedPersonId === newPerson.personId && String(rel.type).toLowerCase() === "spouse");
+                if (!hasSpouseRelation) {
+                  parentRelationships.push({ relatedPersonId: newPerson.personId, type: "spouse" });
+                  try {
+                    await axios.put(`${BACKEND_BASE_URL}/api/persons/${parentId}`, { relationships: parentRelationships });
+                  } catch (error) {
+                    console.warn(`Error connecting existing parent ${parentId} as spouse:`, error);
+                  }
+                }
+              }
+            }
+            if (relationship === "child" && coParentIds.length > 0) {
+              for (const parentId of coParentIds) {
+                if (parentId === selectedPersonId) continue;
+                const parentPerson = people?.find((person) => getBackendPersonId(person) === parentId);
+                if (!parentPerson) continue;
+                const parentRelationships = getPersonRelationships(parentPerson);
+                const hasChildRelation = parentRelationships.some((rel) => rel.relatedPersonId === newPerson.personId && String(rel.type).toLowerCase() === "child");
+                if (!hasChildRelation) {
+                  parentRelationships.push({ relatedPersonId: newPerson.personId, type: "child" });
+                  try {
+                    await axios.put(`${BACKEND_BASE_URL}/api/persons/${parentId}`, { relationships: parentRelationships });
+                  } catch (error) {
+                    console.warn(`Error updating co-parent ${parentId} with new child ${newPerson.personId}:`, error);
+                  }
+                }
+              }
+            }
           }
-
-          try {
-            await axios.put(`${BACKEND_BASE_URL}/api/persons/${newPerson.personId}`, {
-              relationships: [
-                {
-                  relatedPersonId: selectedPersonId,
-                  type: targetRelationshipType,
-                },
-              ],
-            });
-            console.log(`Successfully updated relationship for new person ${newPerson.personId}`);
-          } catch (error) {
-            console.warn(`Error adding reciprocal relationship to new person ${newPerson.personId}: `, error.response?.data || error.message);
-          }
-        } else {
-          console.warn("Cannot establish relationship: new person, selected person, or relationship type is missing.");
         }
       } catch (error) {
-        console.warn("Error adding person to tree: ", error);
-      } finally {
-        setIsLoading(false);
+        console.warn("Error adding person to tree:", error);
       }
     }
-
     setSidebarOpen(false);
     setFormData({ ...initialFormData });
     setSelectedPersonId(null);
     setIsEditMode(false);
-    await fetchTreeData(treeId, isCurrentUsersTree);
+    await fetchTreeData(treeId);
+    setIsLoading(false);
   };
 
-  const openSidebar = async (personId) => {
-    setSelectedPersonId(personId);
+  const openSidebar = async (personData) => {
+    const id = getBackendPersonId(personData);
+    setSelectedPersonId(id);
     setSidebarOpen(true);
     setActionMenuOpen(false);
-    setFormData({ ...initialFormData });
+    setActiveTab("Add member");
+
+    const personFromChart = personData?.data || personData || {};
+    const personFromList = people?.find((person) => getBackendPersonId(person) === id);
+    const d = personFromList?.data ?? personFromList ?? personFromChart;
+
+    const rawGender = d.gender ?? d.sex ?? "";
+    const rawStatus = d.status ?? d.livingStatus ?? "";
+
+    setFormData({
+      ...initialFormData,
+      firstName: d["first name"] ?? d.firstName ?? "",
+      middleName: d["middle name"] ?? d.middleName ?? "",
+      lastName: d["last name"] ?? d.lastName ?? "",
+      birthDate: d.birthDate ?? d.birthday ?? "",
+      birthPlace: d.birthPlace ?? "",
+      gender: normalizeGender(rawGender),
+      status: normalizeStatus(rawStatus),
+      dateOfDeath: d.dateOfDeath ?? "",
+      placeOfDeath: d.placeOfDeath ?? "",
+    });
   };
 
   const closeSidebar = () => {
@@ -519,93 +750,207 @@ function ViewGroupPage() {
     setIsEditMode(false);
   };
 
-  const toggleActionMenu = () => {
-    setActionMenuOpen(!actionMenuOpen);
+  const handleTabClick = (tab) => {
+    setActiveTab(tab);
+    if (tab === "Add member") {
+      setIsEditMode(false);
+      setSelectedPersonId(null);
+      setFormData({ ...initialFormData });
+    }
   };
 
-  const closeActionMenu = (e) => {
-    if (e.target.closest(".action-buttons")) {
-      return;
+  useEffect(() => {
+    if (isEditMode && activeTab !== "Add member") {
+      setActiveTab("Add member");
     }
+  }, [isEditMode, activeTab]);
+
+  const toggleActionMenu = () => setActionMenuOpen(!actionMenuOpen);
+  const closeActionMenu = (e) => {
+    if (e.target.closest(".action-buttons")) return;
     setActionMenuOpen(false);
   };
 
   const handleAddToTree = (personDetails) => {
-    // Set the form data with the details from the selected connection
     setFormData({
-      // It's good to explicitly map fields to ensure correct naming for your form
       relationship: "",
       firstName: personDetails.firstName || "",
       middleName: personDetails.middleName || "",
       lastName: personDetails.lastName || "",
       birthDate: personDetails.birthDate || "",
       birthPlace: personDetails.birthPlace || "",
-      gender: personDetails.gender || "",
-      status: personDetails.status || "living",
-      dateOfDeath: "",
-      placeOfDeath: "",
-      // Relationship should probably be reset or chosen manually for the new person relative to existing tree
+      gender: normalizeGender(personDetails.gender || personDetails.sex),
+      status: normalizeStatus(personDetails.status || personDetails.livingStatus),
+      dateOfDeath: personDetails.dateOfDeath || "",
+      placeOfDeath: personDetails.placeOfDeath || "",
     });
-
-    // Switch to the "Add member" tab
     setActiveTab("Add member");
-
-    // Ensure the form is in 'add' mode, not 'edit' mode, when pre-filling from a connection
-    setIsEditMode(false); // Make sure you have an setIsEditMode state in your parent component
+    setIsEditMode(false);
   };
 
-  const handleDeletePerson = async (personIdToDelete) => {
-    console.log("Attempting to delete person:", personIdToDelete);
-    const confirmDelete = window.confirm(`Are you sure you want to delete this person? This action cannot be undone.`);
-    if (!confirmDelete) {
-      return;
+  const selectedPerson = people?.find((person) => getBackendPersonId(person) === selectedPersonId);
+  const selectedPersonParentIds = selectedPerson ? getExistingRelationshipIds(selectedPerson, "parent") : [];
+  const isAddingParentToChild = !isEditMode && formData.relationship === "parent" && selectedPersonParentIds.length > 0;
+
+  useLayoutEffect(() => {
+    if (!isChartReady || !chartRef.current || !people || people.length === 0) return;
+    if (chartInstanceRef.current && chartRef.current) {
+      d3.select(chartRef.current).selectAll("*").remove();
+      chartInstanceRef.current = null;
     }
-
-    setIsLoading(true);
-
     try {
-      await axios.delete(`${BACKEND_BASE_URL}/api/persons/${personIdToDelete}`);
-      console.log(`Successfully deleted person with ID: ${personIdToDelete}`);
-      await fetchTreeData(treeId, isCurrentUsersTree);
+      const data = people
+        .map((person) => {
+          const source = person.data || person;
+          const firstName = source.firstName ?? source["first name"] ?? "";
+          const lastName = source.lastName ?? source["last name"] ?? "";
+          const birthday = source.birthDate ?? source.birthday ?? "";
+          const gender = toF3Gender(source.gender ?? source.sex);
+          const status = normalizeStatus(source.status ?? source.livingStatus ?? "");
+          const id = getBackendPersonId(person);
+          if (!id) return null;
+          return {
+            id,
+            data: {
+              personId: id,
+              "first name": firstName,
+              "last name": lastName,
+              birthday,
+              gender,
+              status,
+            },
+            rels: getF3Relationships(person),
+          };
+        })
+        .filter(Boolean);
+
+      d3.select(chartRef.current).selectAll("*").remove();
+      const f3Chart = f3
+        .createChart(chartRef.current, data)
+        .setTransitionTime(700)
+        .setCardXSpacing(400)
+        .setCardYSpacing(150)
+        .setSingleParentEmptyCard(false, { label: "ADD" })
+        .setShowSiblingsOfMain(true)
+        .setOrientationVertical();
+
+      const f3Card = f3Chart
+        .setCardHtml()
+        .setCardDisplay([["first name", "last name"], ["birthday"], ["gender"]])
+        .setCardDim({ width: 300, height: 100 })
+        .setOnHoverPathToMain()
+        .setOnCardUpdate(function (d) {
+          d3.select(this).select(".card").style("cursor", "default");
+          const card = this.querySelector(".card-inner");
+
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 0; background: rgba(255,255,255,0.9); border: 1px solid rgba(229,62,62,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #dc2626; font-weight: 700;"
+            )
+            .html("×")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              const personId = getBackendPersonId(d);
+              handleDeletePerson(personId);
+            });
+
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 23px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("+")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              f3Card.onCardClickDefault(e, d);
+              setIsEditMode(false);
+              openSidebar(d);
+            });
+
+          if (d.data?.status === "deceased") {
+            d3.select(card)
+              .append("div")
+              .attr(
+                "style",
+                "position: absolute; top: 6px; left: 8px; color: #b91c1c; font-size: 12px; font-weight: 600;"
+              )
+              .text("Deceased");
+          }
+
+          d3.select(card)
+            .append("div")
+            .attr(
+              "style",
+              "cursor: pointer; width: 22px; height: 22px; position: absolute; top: 0; right: 46px; background: rgba(255,255,255,0.9); border: 1px solid rgba(148,163,184,0.35); border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: #475569;"
+            )
+            .html("✎")
+            .on("mouseenter", function () {
+              d3.select(this).style("background", "rgba(249,250,251,0.95)");
+            })
+            .on("mouseleave", function () {
+              d3.select(this).style("background", "rgba(255,255,255,0.9)");
+            })
+            .on("click", (e) => {
+              e.stopPropagation();
+              f3Card.onCardClickDefault(e, d);
+              setIsEditMode(true);
+              openSidebar(d);
+            });
+        });
+
+      f3Chart.updateTree({ initial: true });
+      chartInstanceRef.current = f3Chart;
     } catch (error) {
-      console.error("Error deleting person:", error.response?.data || error.message);
-      alert(`Failed to delete person: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setIsLoading(false);
+      console.error("Error creating family chart:", error);
     }
-  };
+
+    return () => {
+      if (chartRef.current) {
+        d3.select(chartRef.current).selectAll("*").remove();
+      }
+      chartInstanceRef.current = null;
+    };
+  }, [isChartReady, people]);
 
   return (
     <Layout>
       <div className="min-h-screen relative" style={{ backgroundColor: "#D9D9D9" }}>
-        {/* Main Tree Area */}
         <div className="flex items-center justify-center" style={{ height: "calc(100vh - 64px)" }}>
-          <ReactFlowProvider>
-            <div style={{ width: "100%", height: "100%" }}>
-              <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView>
-                <Background />
-                <Controls />
-              </ReactFlow>
-            </div>
-          </ReactFlowProvider>
+          <div
+            className="f3"
+            ref={setChartRef}
+            style={{ width: "100%", height: "900px", margin: "auto", backgroundColor: "#D9D9D9", color: "#000000ff" }}
+          />
         </div>
-        {/* Loading Spinner */}
+
         {isLoading && (
           <div className="fixed inset-0 z-45 flex justify-center items-center" style={{ backgroundColor: "rgba(0, 0, 0, 0.75)" }}>
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[var(--light-yellow)]"></div>
           </div>
         )}
 
-        {/* Person Details Modal */}
         {isModalOpen && personDetailsInModal && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={closeModal}>
-            {" "}
+          <div className="fixed inset-0 bg-black flex items-center justify-center z-[60]" style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }} onClick={() => setIsModalOpen(false)}>
             <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md relative" onClick={(e) => e.stopPropagation()}>
               <h2 className="text-2xl font-bold mb-4 text-gray-800">
                 {personDetailsInModal.firstName} {personDetailsInModal.middleName && personDetailsInModal.middleName + " "}
                 {personDetailsInModal.lastName}
               </h2>
-
               <div className="space-y-2 text-gray-700">
                 <p>
                   <strong>Gender:</strong> {personDetailsInModal.gender}
@@ -630,13 +975,11 @@ function ViewGroupPage() {
                 )}
                 {personDetailsInModal.status === "deceased" && personDetailsInModal.placeOfDeath && (
                   <p>
-                    <strong>Place of Death:</strong> {personDetailsInModal.placeOfDeath}
-                  </p>
+                    <strong>Place of Death:</strong> {personDetailsInModal.placeOfDeath}</p>
                 )}
               </div>
-
               <div className="mt-6 flex justify-end">
-                <button onClick={closeModal} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
+                <button onClick={() => setIsModalOpen(false)} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
                   Close
                 </button>
               </div>
@@ -644,289 +987,492 @@ function ViewGroupPage() {
           </div>
         )}
 
-        {/* May not work? clicking outside of action menu closes menu */}
         {actionMenuOpen && <div className="fixed inset-0 z-10" onClick={closeActionMenu} />}
-        {/* Overlay for sidebar */}
         {sidebarOpen && <div className="fixed inset-0 bg-black opacity-20 z-40" onClick={closeSidebar} />}
-        {/* Sidebar */}
-        <div
-          className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${
-            sidebarOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-        {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <div className="flex justify-around">
-            {["Add member", "Connections"].map((tab) => (
+
+        <div className={`fixed top-[62px] right-0 h-[calc(100%-4rem)] w-100 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-44 ${sidebarOpen ? "translate-x-0" : "translate-x-full"}`}>
+          <div className="border-b border-gray-200">
+            <div className="flex justify-between items-center px-4 py-2">
+              <span className="text-sm font-medium text-gray-700">
+                Role: {isRoleLoading ? "Loading..." : userRole || "Unknown"}
+              </span>
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`mx-1 my-1 rounded-sm px-3 py-2 text-xs font-medium transition-colors flex-grow ${
-                  activeTab === tab ? "text-white" : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"
-                }`}
-                style={activeTab === tab ? { backgroundColor: "#365643" } : {}}
+                onClick={() => checkUserRole(currentUserId, treeId)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+                title="Refresh role"
               >
-                {tab}
+                Refresh role
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Form Content */}
-        {activeTab === "Add member" && (
-          <form onSubmit={handleAddPerson}>
-            <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
-              {/* Relationship */}
-              {!isEditMode && (
-                <>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
-                  <div className="flex items-center space-x-6">
-                    {/* Parent*/}
-                    <label className="flex items-center">
-                      <div className="relative">
-                        <input
-                          type="radio"
-                          name="relationship"
-                          value="parent"
-                          checked={formData.relationship === "parent"}
-                          onChange={handleInputChange}
-                          className="sr-only"
-                          required={!isEditMode}
-                        />
-                        <div
-                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "parent" ? "" : "border-gray-300"}`}
-                          style={formData.relationship === "parent" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                        />
-                      </div>
-                      <span className="ml-2 text-sm text-gray-700">Parent</span>
-                    </label>
-                    {/* Child */}
-                    <label className="flex items-center">
-                      <div className="relative">
-                        <input type="radio" name="relationship" value="child" checked={formData.relationship === "child"} onChange={handleInputChange} className="sr-only" />
-                        <div
-                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "child" ? "" : "border-gray-300"}`}
-                          style={formData.relationship === "child" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                        />
-                      </div>
-                      <span className="ml-2 text-sm text-gray-700">Child</span>
-                    </label>
-                    {/* Spouse
-                    <label className="flex items-center">
-                      <div className="relative">
-                        <input type="radio" name="relationship" value="spouse" checked={formData.relationship === "spouse"} onChange={handleInputChange} className="sr-only" />
-                        <div
-                          className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "spouse" ? "" : "border-gray-300"}`}
-                          style={formData.relationship === "spouse" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                        />
-                      </div>
-                      <span className="ml-2 text-sm text-gray-700">Spouse</span>
-                    </label> */}
-                  </div>
-                </>
-              )}
-              {/* First Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                <input
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                  required
-                />
-              </div>
-
-              {/* Middle Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
-                <input
-                  type="text"
-                  name="middleName"
-                  value={formData.middleName}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                />
-              </div>
-
-              {/* Last Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                <input
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                  required
-                />
-              </div>
-
-              {/* Birth Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Birth Date</label>
-                <input
-                  type="date"
-                  name="birthDate"
-                  value={formData.birthDate}
-                  onChange={handleInputChange}
-                  placeholder=""
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                />
-              </div>
-
-              {/* Birth Place */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Birth Place</label>
-                <input
-                  type="text"
-                  name="birthPlace"
-                  value={formData.birthPlace}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
-                />
-              </div>
-
-              {/* Gender */}
-              <div>
-                {/* Male Radio */}
-                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-                <div className="flex items-center space-x-6">
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="gender" value="male" checked={formData.gender === "male"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 ${formData.gender === "male" ? "" : "border-gray-300"}`}
-                        style={formData.gender === "male" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Male</span>
-                  </label>
-                  {/* Female Radio */}
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="gender" value="female" checked={formData.gender === "female"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 ${formData.gender === "female" ? "" : "border-gray-300"}`}
-                        style={formData.gender === "female" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Female</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div>
-                {/* Living radio */}
-                <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                <div className="flex items-center space-x-6">
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="status" value="living" checked={formData.status === "living"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "living" ? "" : "border-gray-300"}`}
-                        style={formData.status === "living" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-sm text-gray-700">Living</span>
-                  </label>
-                  {/* Deceased Radio */}
-                  <label className="flex items-center">
-                    <div className="relative">
-                      <input type="radio" name="status" value="deceased" checked={formData.status === "deceased"} onChange={handleInputChange} className="sr-only" />
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "deceased" ? "" : "border-gray-300"}`}
-                        style={formData.status === "deceased" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
-                      />
-                    </div>
-                    <span className="ml-2 text-gray-700">Deceased</span>
-                  </label>
-                </div>
-              </div>
-
-              {formData.status === "Deceased" && (
-                <div>
-                  {/* Date of Death */}
-                  <div className="pb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Death</label>
-                    <input
-                      type="date"
-                      name="dateOfDeath"
-                      value={formData.dateOfDeath}
-                      onChange={handleInputChange}
-                      disabled={formData.status === "Living"}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                  {/* Place of Death */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Place of Death</label>
-                    <input
-                      type="text"
-                      name="placeOfDeath"
-                      value={formData.placeOfDeath}
-                      onChange={handleInputChange}
-                      disabled={formData.status === "Living"}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Add/Edit Person Button */}
-              <div className="pt-4">
-                <button
-                  // onClick={handleAddPerson}
-                  className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
-                  style={{ backgroundColor: "#365643" }}
-                >
-                  {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                  <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
-                </button>
-              </div>
             </div>
-          </form>
-        )}
-        {/* Connections Tab */}
-        {activeTab === "Connections" && (
-          <div className="p-6 space-y-4 overflow-y-auto h-full">
-            {connections.map((person) => (
-              <div key={person.id} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
-                <div className="flex items-center space-x-3">
-                  {/* <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center">
-                    <User className="w-5 h-5 text-gray-500" />
-                  </div> */}
-                  <div className="w-10 h-10 rounded-full bg-gray-100 border-1 border-gray-400 overflow-hidden flex items-center justify-center">
-                    <span className="text-[#313131] text-xl font-bold">
-                      {person.firstName ? person.firstName.charAt(0) : ""}
-                      {person.lastName ? person.lastName.charAt(0) : ""}
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-800">{person.name}</h4>
-                    {/* <p className="text-xs text-gray-500">Alive</p> */}
+            <div className="flex justify-around">
+              {['Add member', 'Members', 'Import Tree'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => handleTabClick(tab)}
+                  className={`mx-1 my-1 rounded-sm px-3 py-2 text-xs font-medium transition-colors flex-grow ${activeTab === tab ? "text-white" : "text-gray-600 hover:text-gray-800 hover:bg-gray-50"}`}
+                  style={activeTab === tab ? { backgroundColor: "#365643" } : {}}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeTab === "Add member" && (
+            <form onSubmit={handleAddPerson}>
+              <div className="p-6 space-y-3 overflow-y-auto h-full pb-16 pt-4">
+                {!isEditMode && (
+                  <>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Relationship</label>
+                    {isAddingParentToChild && (
+                      <div className="mb-3 rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-900">
+                        This child already has another parent. After saving, you can choose whether to connect the new parent and existing parent(s) as spouses.
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-6">
+                      <label className="flex items-center">
+                        <div className="relative">
+                          <input
+                            type="radio"
+                            name="relationship"
+                            value="parent"
+                            checked={formData.relationship === "parent"}
+                            onChange={handleInputChange}
+                            className="sr-only"
+                            required={!isEditMode}
+                          />
+                          <div
+                            className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "parent" ? "" : "border-gray-300"}`}
+                            style={formData.relationship === "parent" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                          />
+                        </div>
+                        <span className="ml-2 text-sm text-gray-700">Parent</span>
+                      </label>
+                      <label className="flex items-center">
+                        <div className="relative">
+                          <input type="radio" name="relationship" value="child" checked={formData.relationship === "child"} onChange={handleInputChange} className="sr-only" />
+                          <div
+                            className={`w-4 h-4 rounded-full border-2 ${formData.relationship === "child" ? "" : "border-gray-300"}`}
+                            style={formData.relationship === "child" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                          />
+                        </div>
+                        <span className="ml-2 text-sm text-gray-700">Child</span>
+                      </label>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name</label>
+                  <input
+                    type="text"
+                    name="middleName"
+                    value={formData.middleName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Birth Date</label>
+                  <input
+                    type="date"
+                    name="birthDate"
+                    value={formData.birthDate}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Birth Place</label>
+                  <input
+                    type="text"
+                    name="birthPlace"
+                    value={formData.birthPlace}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                  <div className="flex items-center space-x-6">
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="gender" value="male" checked={formData.gender === "male"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 ${formData.gender === "male" ? "" : "border-gray-300"}`}
+                          style={formData.gender === "male" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Male</span>
+                    </label>
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="gender" value="female" checked={formData.gender === "female"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 ${formData.gender === "female" ? "" : "border-gray-300"}`}
+                          style={formData.gender === "female" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Female</span>
+                    </label>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleAddToTree(person)}
-                  className="text-white px-3 py-1.5 rounded text-xs font-medium hover:opacity-90 transition-opacity"
-                  style={{ backgroundColor: "#365643" }}
-                >
-                  Add to Tree
-                </button>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <div className="flex items-center space-x-6">
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="status" value="living" checked={formData.status === "living"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "living" ? "" : "border-gray-300"}`}
+                          style={formData.status === "living" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-sm text-gray-700">Living</span>
+                    </label>
+                    <label className="flex items-center">
+                      <div className="relative">
+                        <input type="radio" name="status" value="deceased" checked={formData.status === "deceased"} onChange={handleInputChange} className="sr-only" />
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.status === "deceased" ? "" : "border-gray-300"}`}
+                          style={formData.status === "deceased" ? { backgroundColor: "#365643", borderColor: "#365643" } : {}}
+                        />
+                      </div>
+                      <span className="ml-2 text-gray-700">Deceased</span>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.status === "deceased" && (
+                  <div>
+                    <div className="pb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date of Death</label>
+                      <input
+                        type="date"
+                        name="dateOfDeath"
+                        value={formData.dateOfDeath}
+                        onChange={handleInputChange}
+                        disabled={formData.status === "living"}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Place of Death</label>
+                      <input
+                        type="text"
+                        name="placeOfDeath"
+                        value={formData.placeOfDeath}
+                        onChange={handleInputChange}
+                        disabled={formData.status === "living"}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-emerald-900 focus:border-emerald-900 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    className="w-full text-white py-2.5 px-4 rounded-md hover:bg-green-500 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                    style={{ backgroundColor: "#365643" }}
+                  >
+                    {isEditMode ? <Edit3 className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                    <span>{isEditMode ? "Edit Person" : "Add Person"}</span>
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+            </form>
+          )}
+
+          {activeTab === "Members" && (
+            <div className="p-6 space-y-4 overflow-y-auto h-full">
+              {isGroupMembersLoading ? (
+                <div className="text-sm text-gray-500">Loading members...</div>
+              ) : groupMembers.length > 0 ? (
+                [...groupMembers]
+                  .sort((a, b) => {
+                    const aIsHost = String(a.role || "").toLowerCase() === "host";
+                    const bIsHost = String(b.role || "").toLowerCase() === "host";
+                    if (aIsHost && !bIsHost) return -1;
+                    if (!aIsHost && bIsHost) return 1;
+                    const aName = (a.userDetails ? `${a.userDetails.firstName || ""} ${a.userDetails.lastName || ""}` : "Unknown Member").trim().toLowerCase();
+                    const bName = (b.userDetails ? `${b.userDetails.firstName || ""} ${b.userDetails.lastName || ""}` : "Unknown Member").trim().toLowerCase();
+                    return aName.localeCompare(bName);
+                  })
+                  .map((member) => {
+                    const name = member.userDetails ? `${member.userDetails.firstName || ""} ${member.userDetails.lastName || ""}`.trim() : "Unknown Member";
+                    const initials = member.userDetails
+                      ? `${member.userDetails.firstName?.charAt(0) || ""}${member.userDetails.lastName?.charAt(0) || ""}`
+                      : "?";
+                    return (
+                      <div key={member.id || member.userId || name} className="border border-gray-300 rounded-lg p-4 flex items-center justify-between gap-x-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-400 overflow-hidden flex items-center justify-center">
+                            <span className="text-[#313131] text-xl font-bold">{initials}</span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-800">{name}</h4>
+                            <p className="text-xs text-gray-500">{member.role || "Member"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              ) : (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                  No group members found for this tree.
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === "Import Tree" && (
+            <div className="p-6 space-y-4 overflow-y-auto h-full">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Select a personal tree to import</h3>
+                <p className="text-xs text-gray-500">Choose one of your personal trees for merge preview and submit an import request.</p>
+              </div>
+
+              <div className="space-y-3">
+                {personalTrees.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                    No personal trees available for import.
+                  </div>
+                ) : (
+                  personalTrees.map((tree) => (
+                    <button
+                      type="button"
+                      key={tree.treeId || tree.id}
+                      onClick={() => handleSelectPersonalTree(tree.treeId || tree.id)}
+                      className={`w-full border rounded-lg p-4 text-left ${selectedPersonalTreeId === (tree.treeId || tree.id) ? "border-emerald-700 bg-emerald-50" : "border-gray-200 hover:border-gray-300"}`}
+                    >
+                      <div className="flex items-center justify-between gap-x-3">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{getPersonalTreeLabel(tree)}</h4>
+                          <p className="text-xs text-gray-500">{tree.description || `${tree.members?.length || 0} people`}</p>
+                        </div>
+                        {selectedPersonalTreeId === (tree.treeId || tree.id) && <span className="text-xs text-emerald-700">Selected</span>}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {selectedPersonalTreeId && (
+                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Preview</h4>
+                  {selectedPersonalTreePersons.length === 0 ? (
+                    <p className="text-sm text-gray-500">Loading selected tree members...</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 text-sm text-gray-700 mb-4">
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Group tree size</p>
+                          <p>{people.length} people</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Import tree size</p>
+                          <p>{selectedPersonalTreePersons.length} people</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">Matching nodes</p>
+                          <p>{importPreviewSummary?.matchedCount ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3">
+                          <p className="font-semibold">New nodes</p>
+                          <p>{importPreviewSummary?.newPersonCount ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                          The merge preview uses summary matching data and hides individual nodes for a cleaner review.
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-3 bg-white text-sm text-gray-700">
+                          <p className="font-medium text-gray-800">Preview details</p>
+                          <p className="mt-2">Matching details are available in the summary above. Individual node rows are not shown in this preview.</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-3 flex flex-col gap-2">
+                {userRole !== "Host" && (
+                  <button
+                    type="button"
+                    onClick={handleSubmitImportRequest}
+                    disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                    className="w-full text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "#365643" }}
+                  >
+                    {isImportRequestLoading ? "Submitting request..." : "Submit Import Request"}
+                  </button>
+                )}
+
+                {userRole === "Host" && (
+                  <button
+                    type="button"
+                    onClick={handleMergeSelectedTreeNow}
+                    disabled={isImportRequestLoading || !selectedPersonalTreeId}
+                    className="w-full text-[#365643] border border-emerald-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                  >
+                    {isImportRequestLoading ? "Merging..." : "Merge Now"}
+                  </button>
+                )}
+
+                {userRole !== "Host" && (
+                  <p className="text-xs text-gray-500 pt-1">Only the group Host can perform an immediate merge.</p>
+                )}
+              </div>
+
+              {userRole === "Host" && (
+                <div className="rounded-lg border border-gray-200 bg-white p-4 mt-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">Pending import requests</h4>
+                      <p className="text-xs text-gray-500">
+                        {importRequests.length} pending request{importRequests.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fetchImportRequests(treeId)}
+                        className="text-xs text-gray-500 hover:text-gray-800"
+                        title="Refresh pending requests"
+                      >
+                        Refresh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          fetchImportRequests(treeId);
+                          setIsRequestsModalOpen(true);
+                        }}
+                        className="text-xs text-[#365643] border border-[#365643] px-3 py-1 rounded hover:bg-emerald-50"
+                      >
+                        View Requests
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {isRequestsModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setIsRequestsModalOpen(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Pending Import Requests</h2>
+                <p className="text-xs text-gray-500">Review and approve or reject requests from group members.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRequestsModalOpen(false)}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4 max-h-[70vh]">
+              {importRequests.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-gray-500">No pending import requests.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {importRequests.map((request) => (
+                    <div key={request.id || request.requestId} className="rounded-lg border border-gray-200 p-4">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{request.requestorName || "Unknown requester"}</p>
+                          <p className="text-xs text-gray-500">Requested import for tree {request.personalTreeId || request.treeId}</p>
+                          <p className="text-xs text-gray-500">Created: {new Date(request.createdAt || request.created || Date.now()).toLocaleString()}</p>
+                          <p className="text-xs text-gray-600 mt-2">{request.preview ? `Preview matched ${request.preview.matchedCount} of ${request.preview.importPersonCount} people.` : "No preview available."}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveImportRequest(request.requestId || request.id)}
+                            className="bg-[#365643] text-white px-4 py-2 rounded-md text-sm hover:bg-[#4f6f52] disabled:opacity-50"
+                            disabled={isImportRequestLoading}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectImportRequest(request.requestId || request.id)}
+                            className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:opacity-50"
+                            disabled={isImportRequestLoading}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+            <div className="flex items-center justify-end border-t border-gray-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => fetchImportRequests(treeId)}
+                className="text-xs text-[#365643] border border-[#365643] px-3 py-1 rounded hover:bg-emerald-50"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast.visible && (
+        <div className="fixed bottom-4 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 px-4">
+          <div className={`rounded-xl px-4 py-3 shadow-lg text-sm font-medium text-white ${toast.type === "success" ? "bg-emerald-600" : "bg-red-600"}`}>
+            {toast.message}
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
 
-// Wrap with AuthController to ensure only authenticated users can access
 function ViewGroupPageWithAuth() {
   return (
     <AuthController mode="PROTECT">

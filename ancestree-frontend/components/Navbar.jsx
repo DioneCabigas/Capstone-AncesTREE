@@ -445,7 +445,7 @@ export default function Navbar() {
       <div className="w-full flex items-center">
         {/* Left side - Logo */}
         <div className="flex items-center space-x-2 flex-shrink-0">
-          <Link href={user ? "/home" : "/"} className="flex items-center">
+          <Link href={user ? "/dashboard" : "/"} className="flex items-center">
             <Image src="/images/AncesTree_Logo.png" alt="Logo" width={135} height={40}/>
           </Link>
         </div>

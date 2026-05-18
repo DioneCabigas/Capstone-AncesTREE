@@ -2,9 +2,11 @@
 
 import Layout from '../../components/Layout';
 import AuthController from '@/components/AuthController';
+import AlertMessage from '@/components/AlertMessage';
 import { useState, useEffect, useCallback } from 'react';
 import { User as UserIcon, X as XMark, Loader2 } from 'lucide-react';
 import axios from 'axios';
+import { getInitials } from '@/app/utils/helpers';
 
 function SearchUsers() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -16,10 +18,7 @@ function SearchUsers() {
 
   const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return 'N/A';
-    return `${firstName ? firstName.charAt(0) : ''}${lastName ? lastName.charAt(0) : ''}`.toUpperCase();
-  };
+
 
   const performSearch = useCallback(async (term, city, country) => {
     const trimmedTerm = term.trim();
@@ -116,9 +115,7 @@ function SearchUsers() {
             </button>
           </div>
 
-          {error && (
-            <p className="text-red-500 text-center my-4">{error}</p>
-          )}
+          {error && <AlertMessage message={error} type="error" />}
 
           <h2 className="text-2xl font-bold mb-4 mt-5 text-[#313131]">Results</h2>
           <div className="min-h-[150px]">

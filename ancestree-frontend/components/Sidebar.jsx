@@ -14,7 +14,8 @@ import {
   Settings,
   LogOut,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  LayoutDashboard
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -107,6 +108,12 @@ export default function Sidebar() {
   }
 
   const navigationItems = [
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+      description: "Overview of your family activities"
+    },
     {
       name: "Profile",
       href: "/profile",

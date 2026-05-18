@@ -5,7 +5,7 @@ const FamilyGroupInvitation = require('../entities/FamilyGroupInvitation');
 const INVITES_COLLECTION = 'groupInvitations';
 const MEMBERS_COLLECTION = 'familyGroupMembers';
 
-exports.sendInvitation = async (groupId, senderId, receiverId) => {
+exports.sendInvitation = async (groupId, senderId, receiverId, role = "Member") => {
   const existing = await db
     .collection(INVITES_COLLECTION)
     .where('groupId', '==', groupId)
@@ -19,7 +19,7 @@ exports.sendInvitation = async (groupId, senderId, receiverId) => {
     throw err;
   }
 
-  const invitation = new FamilyGroupInvitation(groupId, senderId, receiverId);
+  const invitation = new FamilyGroupInvitation(groupId, senderId, receiverId, role);
   const invitationData = invitation.toJSON();
 
   await db.collection(INVITES_COLLECTION).add(invitationData);
@@ -43,7 +43,7 @@ exports.acceptInvitation = async (invitationId) => {
   await db.collection(MEMBERS_COLLECTION).add({
     groupId: invite.groupId,
     userId: invite.receiverId,
-    role: 'Member',
+    role: invite.role || 'Member',
     addedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 

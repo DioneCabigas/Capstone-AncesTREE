@@ -1,0 +1,172 @@
+Family Tree Routes (/api/family-trees)
+
+POST /api/family-trees/
+  - Creates a new family tree
+
+POST /api/family-trees/newTree
+  - Creates a new family tree and the first person in it
+
+GET /api/family-trees/:treeId
+  - Gets family tree metadata by tree ID
+
+GET /api/family-trees/
+  - Gets all family trees
+
+PUT /api/family-trees/:treeId
+  - Updates a family tree by tree ID
+
+DELETE /api/family-trees/:treeId
+  - Deletes a family tree by tree ID
+
+GET /api/family-trees/personal/:userId
+  - Gets the personal tree for a specific user
+
+
+Person Routes (/api/persons)
+
+POST /api/persons/:treeId
+  - Creates a person in a specific tree
+
+POST /api/persons/self/:treeId
+  - Creates a person with the same ID as the user UID for personal trees
+
+GET /api/persons/:personId
+  - Gets a person by person ID
+
+GET /api/persons/tree/:treeId
+  - Gets all people in a tree by tree ID
+
+PUT /api/persons/:personId
+  - Updates a person by person ID (also used for adding relationships)
+
+PATCH /api/persons/relationship/:personId
+  - Deletes a relationship from a person by person ID
+
+DELETE /api/persons/:personId
+  - Deletes a person by person ID
+
+POST /api/persons/ensure-user/:treeId
+  - Ensures the current user's person node exists in the specified tree
+
+
+Family Group Routes (/api/family-groups)
+
+POST /api/family-groups/
+  - Creates a new family group (automatically adds creator as Host)
+
+GET /api/family-groups/:id
+  - Gets family group by ID
+
+GET /api/family-groups/user/:userId
+  - Gets all family groups for a user
+
+PUT /api/family-groups/:groupId
+  - Updates family group description
+
+
+Family Group Member Routes (/api/family-group-members)
+
+POST /api/family-group-members/
+  - Adds a member to a family group (role: Host/Editor/Member, default: Member)
+
+GET /api/family-group-members/group/:groupId
+  - Gets all members of a family group
+
+PUT /api/family-group-members/:memberId
+  - Updates member status
+
+DELETE /api/family-group-members/:memberId
+  - Removes a member from a family group
+
+
+Family Group Invitation Routes (/api/group-invitation)
+
+POST /api/group-invitation/
+  - Sends an invitation to join a family group (role: Host/Editor/Member, default: Member)
+
+PUT /api/group-invitation/accept/:id
+  - Accepts a group invitation
+
+PUT /api/group-invitation/reject/:id
+  - Rejects a group invitation
+
+GET /api/group-invitation/user/:userId
+  - Gets all invitations for a user
+
+
+Import Tree Request Routes (/api/import-tree-req)
+
+POST /api/import-tree-req/:treeId/create
+  - Creates a new import request for a group tree
+
+GET /api/import-tree-req/:treeId/pending
+  - Gets all pending import requests for a group tree
+
+GET /api/import-tree-req/:treeId
+  - Gets all import requests for a group tree
+
+GET /api/import-tree-req/user/requests
+  - Gets import requests for the current user
+
+PUT /api/import-tree-req/:requestId/approve
+  - Approves an import request (Host only)
+
+PUT /api/import-tree-req/:requestId/reject
+  - Rejects an import request (Host only)
+
+DELETE /api/import-tree-req/:requestId
+  - Deletes an import request
+
+
+Merge Request Routes (/api/merge-requests)
+
+POST /api/merge-requests/
+  - Creates a merge request
+
+GET /api/merge-requests/group/:groupId
+  - Gets merge requests by group
+
+GET /api/merge-requests/pending/:groupId
+  - Gets pending merge requests for group owner
+
+GET /api/merge-requests/user/:userId
+  - Gets merge requests for a user
+
+PUT /api/merge-requests/:requestId
+  - Updates merge request status
+
+
+Other Routes
+
+GET /api/user/:uid
+  - Gets user profile
+
+PUT /api/user/:uid
+  - Updates user profile
+
+GET /api/profile/:uid
+  - Gets user profile details
+
+PUT /api/profile/:uid
+  - Updates user profile details
+
+GET /api/connections/:userId
+  - Gets user connections
+
+POST /api/connections/
+  - Creates a connection
+
+GET /api/search/
+  - Searches users
+
+GET /api/settings/:userId
+  - Gets user settings
+
+PUT /api/settings/:userId
+  - Updates user settings
+
+GET /api/gallery/tree/:treeId
+  - Gets gallery items for a tree
+
+POST /api/gallery/
+  - Uploads gallery item

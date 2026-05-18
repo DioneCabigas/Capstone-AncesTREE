@@ -14,6 +14,7 @@ const searchRoutes = require("./routes/searchRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const familyGroupInvitation = require("./routes/familyGroupInvitationRoutes");
 const mergeRequestRoutes = require("./routes/mergeRequestRoutes");
+const importTreeRequestRoutes = require("./routes/importTreeRequestRoutes");
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -21,7 +22,7 @@ const port = process.env.PORT || 3001;
 app.use(cors({ origin: "https://ancestree2025.netlify.app", credentials: true }));
 // app.use(cors({ origin: "http://localhost:3000", credentials: true }));
 app.use(bodyParser.json());
-// app.use(express.json()); // Ignore this. Need to test for something
+// app.use(express.json()); // Ignore this
 
 app.use("/api/user", userRoutes);
 app.use("/api/connections", connectionRoutes);
@@ -35,9 +36,12 @@ app.use("/api/search", searchRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/group-invitation", familyGroupInvitation);
 app.use("/api/merge-requests", mergeRequestRoutes);
+app.use("/api/import-tree-req", importTreeRequestRoutes);
 
-// For testing purposes (Ignore lng ni ninyo)
+// For testing purposes
 const testRoutes = require("../tests/routes/testRoutes");
+const testFamilyTree = require("../tests/routes/testFamilyTreeRoutes");
+app.use("/test/family-trees", testFamilyTree);
 app.use("/test", testRoutes);
 // ----------------------------------------------------------
 

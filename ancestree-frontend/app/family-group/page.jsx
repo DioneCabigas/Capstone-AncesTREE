@@ -262,7 +262,7 @@ function FamilyGroup() {
                         View Group
                       </button>
                     </Link>
-                    <Link href={`/group-tree?treeId=${group.treeId}`}>
+                    <Link href={`/group-tree?treeId=${group.treeId}&groupId=${group.id}`}>
                       <button className="bg-[#365643] text-white text-sm hover:bg-[#4F6F52] px-4 py-2 rounded-md items-center cursor-pointer">View Tree</button>
                     </Link>
                   </div>

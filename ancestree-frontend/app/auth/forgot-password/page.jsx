@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/app/utils/firebase";
 import AuthController from '@/components/AuthController';
+import AlertMessage from '@/components/AlertMessage';
 import Link from "next/link";
 import Image from "next/image"; // Assuming you want to include the logo
 
@@ -68,16 +69,8 @@ function ForgotPasswordContent() {
               />
             </div>
 
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <span className="block sm:inline">{error}</span>
-              </div>
-            )}
-            {message && (
-              <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <span className="block sm:inline">{message}</span>
-              </div>
-            )}
+            {error && <AlertMessage message={error} type="error" />}
+            {message && <AlertMessage message={message} type="success" />}
  
             <button
               type="submit"

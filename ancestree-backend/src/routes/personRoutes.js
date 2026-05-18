@@ -23,4 +23,7 @@ router.patch("/relationship/:personId", personController.deleteRelationshipFromP
 // Delete person by Id
 router.delete("/:personId", personController.deletePerson);
 
+// Ensure user person exists in tree
+router.post("/ensure-user/:treeId", personController.ensureUserPerson);
+
 module.exports = router;

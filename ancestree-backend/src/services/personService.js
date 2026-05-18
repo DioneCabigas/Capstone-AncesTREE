@@ -91,3 +91,33 @@ exports.deletePerson = async (personId) => {
   await collection.doc(personId).delete();
   return { success: true };
 };
+
+exports.ensureUserPersonExists = async (treeId, uid) => {
+  const existing = await this.getPersonById(uid);
+  if (existing && existing.treeId === treeId) {
+    return existing;
+  }
+
+  // Fetch user and profile data
+  const userDoc = await db.collection('users').doc(uid).get();
+  if (!userDoc.exists) {
+    throw new Error('User not found');
+  }
+  const userData = userDoc.data();
+
+  const profileDoc = await db.collection('profiles').doc(uid).get();
+  const profileData = profileDoc.exists ? profileDoc.data() : {};
+
+  const personData = {
+    firstName: userData.firstName,
+    middleName: userData.middleName || '',
+    lastName: userData.lastName,
+    birthDate: profileData.birthDate || '',
+    birthPlace: profileData.birthPlace || '',
+    gender: '', // Default, can be updated later
+    status: 'living',
+    relationships: []
+  };
+
+  return await this.createPersonSelf(treeId, uid, personData);
+};

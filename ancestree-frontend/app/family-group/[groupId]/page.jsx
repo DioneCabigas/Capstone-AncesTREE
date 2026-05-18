@@ -5,10 +5,11 @@ import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import axios from "axios";
+import { getInitials } from "@/app/utils/helpers";
 import { ArrowLeft, Edit, User, Users, ChevronDown, Check, X as XMark } from "lucide-react";
 import { auth } from "@/app/utils/firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import InviteMembersModal from "@/components/InviteMembersModal"; // Import the new modal component
+import InviteMembersModal from "@/components/InviteMembersModal";
 
 function ViewGroupPage() {
   const { groupId } = useParams();
@@ -31,12 +32,6 @@ function ViewGroupPage() {
   const API_FAMILY_GROUPS_PATH = "/api/family-groups";
   const API_FAMILY_GROUP_MEMBERS_PATH = "/api/family-group-members";
   const API_USERS_PATH = "/api/user"; // Added for fetching user details for members
-
-  // Function to get initials for avatars
-  const getInitials = (firstName, lastName) => {
-    if (!firstName && !lastName) return "N/A";
-    return `${firstName ? firstName.charAt(0) : ""}${lastName ? lastName.charAt(0) : ""}`.toUpperCase();
-  };
 
   // Function to fetch group details and all its members with their user details
   const fetchGroupAndMembers = async () => {
@@ -185,9 +180,9 @@ function ViewGroupPage() {
   // Determine the current user's role in the group for UI conditional rendering (Frontend RBAC)
   const currentUserMembership = members.find((member) => member.userId === currentUserId);
   const currentUserRole = currentUserMembership?.role;
-  const isOwner = currentUserRole === "Owner";
-  const isAdmin = currentUserRole === "Admin";
-  const canEditGroup = isOwner || isAdmin; // Owners and Admins can perform certain edits/invites
+  const isHost = currentUserRole === "Host";
+  const isEditor = currentUserRole === "Editor";
+  const canEditGroup = isHost || isEditor; // Hosts and Editors can perform certain edits/invites
 
   // Get existing member IDs to pass to the invite modal for filtering
   const existingMemberIds = members.map((member) => member.userId);
@@ -255,8 +250,11 @@ function ViewGroupPage() {
         </div>
 
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
-          <Link href={`/group-tree?treeId=${group.treeId}`}>
+          <div>
+            <h1 className="text-4xl font-bold text-[#313131]">{group.name}</h1>
+            <p className="text-sm text-gray-600 mt-1">Your role: {currentUserRole || "Loading..."}</p>
+          </div>
+          <Link href={`/group-tree?treeId=${group.treeId}&groupId=${groupId}`}>
             <button className="bg-[#365643] text-white hover:bg-[#4F6F52] px-6 py-2 rounded-md flex items-center gap-2 cursor-pointer">View Tree</button>
           </Link>
         </div>
@@ -359,8 +357,8 @@ function ViewGroupPage() {
                   {isLeaving ? "Leaving..." : "Leave Group"}
                 </button>
 
-                {/* Show Delete Group button only if current user is the owner */}
-                {isOwner && (
+                {/* Show Delete Group button only if current user is the host */}
+                {isHost && (
                   <button className="border border-red-500 text-red-500 hover:bg-red-50 px-6 py-2 rounded-md" onClick={() => setShowDeleteConfirmModal(true)}>
                     Delete Group
                   </button>
@@ -394,7 +392,7 @@ function ViewGroupPage() {
                       </div>
                       <p className="text-[#313131] font-medium text-sm text-center">{member.userDetails ? `${member.userDetails.firstName} ${member.userDetails.lastName || ""}` : "Unknown User"}</p>
                       <p className="text-[#808080] text-xs text-center">{member.role}</p>
-                      {canEditGroup && member.userId !== currentUserId && !(member.role === "Owner" && members.filter((m) => m.role === "Owner").length === 1) && (
+                      {canEditGroup && member.userId !== currentUserId && !(member.role === "Host" && members.filter((m) => m.role === "Host").length === 1) && (
                         <button onClick={() => handleRemoveMemberClick(member)} className="absolute top-1 right-1 text-red-400 hover:text-red-600 p-1 rounded-full bg-white/70 hover:bg-white" title="Remove Member">
                           <XMark className="w-4 h-4" />
                         </button>

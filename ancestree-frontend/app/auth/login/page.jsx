@@ -7,6 +7,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/app/utils/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import AuthController from '@/components/AuthController';
+import AlertMessage from '@/components/AlertMessage';
 import Image from 'next/image';
 import Link from "next/link";
 
@@ -60,7 +61,7 @@ function LoginContent() {
             email: user.email,
           });
         }
-        router.push("/home");
+        router.push("/dashboard");
       } else {
         setError("Please verify your email before logging in.");
       }
@@ -85,7 +86,7 @@ function LoginContent() {
     <div className="flex min-h-screen">
       {/* Left side - Login form */}
       <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-white px-4 md:px-8">
-        <Link href={user ? "/home" : "/"} className="flex items-center">
+        <Link href={user ? "/dashboard" : "/"} className="flex items-center">
           {/* Logo with dark accent background and white text */}
           <Image src="/images/AncesTree_Logo.png" alt="Logo" width={135} height={40}/>
         </Link>
@@ -95,11 +96,7 @@ function LoginContent() {
           <p className="text-sm text-gray-500 text-center mb-6">Ready to manage your Family Tree again?</p>
  
           <form className="pt-6" onSubmit={onLogin}>
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-                <span className="block sm:inline">{error}</span>
-              </div>
-            )}
+            {error && <AlertMessage message={error} type="error" />}
             <div className="mb-4">
               <label className="block text-gray-700 text-base mb-2">Email</label>
               <input
